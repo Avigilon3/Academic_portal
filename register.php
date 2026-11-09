@@ -1,0 +1,797 @@
+<?php
+require_once 'core/config/config.php';
+require_once 'core/auth/session.php';
+require_once 'core/db/connection.php';
+require_once 'core/config/functions.php';
+require_once 'core/mail/mailer.php';
+
+$notFoundMessage = "Invalid email address. Your email address doesn't exist in the database. Contact Registrar or MIS for assistance.";
+$prefilledFirst = '';
+$prefilledLast = '';
+$detectedRole = '';
+
+$err = get_flash('error');
+$msg = get_flash('success');
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $email = strtolower(trim((string)($_POST['email'] ?? '')));
+    $pass  = trim((string)($_POST['password'] ?? ''));
+    $confirm = trim((string)($_POST['retype_password'] ?? ''));
+    $directoryProfile = null;
+    $first = '';
+    $last = '';
+    $roleChoice = '';
+
+    if ($email === '') {
+        $err = 'Please enter your PTC email address.';
+    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $err = 'Please enter a valid email address.';
+    } else {
+        $requiredDomain = '@paterostechnologicalcollege.edu.ph';
+        if (!str_ends_with($email, $requiredDomain)) {
+            $err = 'Please use the PTC email address.';
+        }
+    }
+
+    if (!$err) {
+        $directoryProfile = lookupDirectoryProfileByEmail($pdo, $email);
+        if (!$directoryProfile) {
+            $err = $notFoundMessage;
+        } else {
+            $first = trim((string)$directoryProfile['first_name']);
+            $last = trim((string)$directoryProfile['last_name']);
+            $roleChoice = strtolower((string)$directoryProfile['role']);
+            $prefilledFirst = $first;
+            $prefilledLast = $last;
+            $detectedRole = ucfirst($roleChoice);
+        }
+    }
+
+    if (!$err && (!$pass || !$confirm)) {
+        $err = 'Please fill in all required fields.';
+    } elseif (!$err && strlen($pass) < 8) {
+        $err = 'Password must be at least 8 characters.';
+    } elseif (!$err && $pass !== $confirm) {
+        $err = 'Passwords do not match.';
+    }
+
+    if (!$err) {
+        $check = $pdo->prepare('SELECT id, email, password_hash, role, first_name, last_name, status FROM users WHERE LOWER(email) = LOWER(?) LIMIT 1');
+        $check->execute([$email]);
+        $user = $check->fetch(PDO::FETCH_ASSOC);
+
+        if (!$user) {
+            $insert = $pdo->prepare('INSERT INTO users (email, role, first_name, last_name, status) VALUES (?, ?, ?, ?, ?)');
+            $insert->execute([$email, $roleChoice, $first, $last, 'INACTIVE']);
+            $userId = (int)$pdo->lastInsertId();
+            $user = [
+                'id' => $userId,
+                'email' => $email,
+                'password_hash' => null,
+                'role' => $roleChoice,
+                'first_name' => $first,
+                'last_name' => $last,
+                'status' => 'INACTIVE',
+            ];
+        }
+
+        if (!empty($user['password_hash'])) {
+            $err = 'This account is already registered. Please sign in instead.';
+        }
+    }
+
+    if (!$err) {
+        $code = strval(random_int(100000, 999999));
+        $userId = (int)$user['id'];
+
+        $upd = $pdo->prepare('UPDATE users SET verify_code = ?, first_name = ?, last_name = ?, role = ? WHERE id = ?');
+        $upd->execute([$code, $first, $last, $roleChoice, $userId]);
+
+        if ($directoryProfile['table'] === 'students') {
+            $link = $pdo->prepare('UPDATE students SET user_id = ? WHERE id = ?');
+            $link->execute([$userId, $directoryProfile['id']]);
+        } elseif ($directoryProfile['table'] === 'professors') {
+            $link = $pdo->prepare('UPDATE professors SET user_id = ? WHERE id = ?');
+            $link->execute([$userId, $directoryProfile['id']]);
+        }
+
+        $subject = 'Your Academic Portal verification code';
+        $body = "Your verification code is: {$code}\n\nIf you did not request this, please ignore.";
+        if (!send_app_email($email, $subject, $body)) {
+            $clearCode = $pdo->prepare('UPDATE users SET verify_code = NULL WHERE id = ?');
+            $clearCode->execute([$userId]);
+            set_flash('error', 'We could not send the verification email. Please try again later or contact MIS.');
+            header('Location: ' . BASE_URL . '/register.php');
+            exit;
+        }
+
+        $_SESSION['pending_reg'] = [
+            'email'      => $email,
+            'password'   => $pass,
+            'code'       => $code,
+            'first_name' => $first,
+            'last_name'  => $last,
+            'role'       => $roleChoice,
+        ];
+
+        set_flash('success', 'A 6-digit verification code was sent to your email. Check your spam folder if it does not arrive.');
+        header('Location: ' . BASE_URL . '/verify.php');
+        exit;
+    }
+}
+$canSetCredentials = $prefilledFirst !== '' && $prefilledLast !== '';
+$roleDisplayText = $detectedRole ? 'Detected role: ' . $detectedRole : '';
+$emailHelperMessage = '';
+if ($detectedRole) {
+    $emailHelperMessage = 'Email verified as ' . strtolower($detectedRole) . ' account.';
+} elseif ($err === $notFoundMessage) {
+    $emailHelperMessage = $notFoundMessage;
+}
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register | Academic Portal</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Arimo:ital,wght@0,400..700;1,400..700&family=Bayon&family=Space+Grotesk:wght@300..700&display=swap">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0" />
+    <style>
+        :root {
+            --primary-green: #145a32;
+            --primary-yellow: #FFD700;
+            --hero-green: #0e5130;
+            --accent-blue: #1bb8d1;
+            --highlight-yellow: #ffd43b;
+            --border-muted: #dfe6eb;
+            --text-dark: #162125;
+            --text-muted: #5f6b74;
+            --text-base: #F9F9F9;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: 'Arimo', Arial, sans-serif;
+            background: #f0f3f6;
+            color: var(--text-dark);
+        }
+        .page-shell {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+            position: relative;
+        }
+        .hero {
+            position: relative;
+            height: 100vh;
+            min-height: 100vh;
+            padding: 48px 48vw 72px max(16px, 4vw);
+            backdrop-filter: blur(3px);
+            background: 
+            linear-gradient(120deg, rgba(6, 64, 42, 0.92), rgba(6, 98, 80, 0.7)),
+            linear-gradient(180deg, rgba(0, 56, 32, 0.75), rgba(10, 104, 72, 0.65)),
+                url('admin/assets/images/background.jpg') center/cover no-repeat;
+            color: #fff;
+            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+        .hero::after {
+            content: '';
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            width: 100%;
+            height: 27px;
+            background: linear-gradient(180deg, #FFD700 25.96%, #998100 99.98%, #A08700 99.99%);
+        }
+        .hero-inner {
+            position: relative;
+            z-index: 1;
+            width: 100%;
+            max-width: 620px;
+            margin: 0 auto;
+            transform: translateY(-4px);
+        }
+        .hero-logo {
+            width: 86px;
+            height: 86px;
+            object-fit: contain;
+            margin-bottom: 10px;
+            aspect-ratio: 54/55;
+            border: 8px solid rgba(255, 255, 255, 0.20);
+            border-radius: 50%;
+        }
+        .hero h1 {
+            color: var(--text-base);
+            text-align: center;
+            font-family: Bayon;
+            font-size: clamp(1.8rem, 4vw, 2.2rem);
+            font-style: normal;
+            font-weight: 400;
+            line-height: 35px;
+            margin: 0;
+        }
+        .hero h2 {
+            font-size: clamp(2rem, 5vw, 3rem);
+            font-family: "Space Grotesk", sans-serif;
+            font-weight: 700;
+            text-align: center;
+            color: var(--primary-yellow);
+            margin: 0;
+            text-shadow: 0 6px 18px rgba(0, 0, 0, 0.3);
+        }
+        .hero p {
+          color: var(--text-base);
+          font-family: Arimo;
+          font-size: 18px;
+          font-style: normal;
+          font-weight: 400;
+          line-height: 28px;
+        }
+        .auth-area {
+            position: absolute;
+            z-index: 3;
+            top: 0;
+            right: 0;
+            width: min(48vw, 570px);
+            height: 100vh;
+            padding: 32px clamp(18px, 4vw, 56px);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: rgba(248, 251, 249, .84);
+            border-left: 1px solid rgba(20, 90, 50, .12);
+            backdrop-filter: blur(14px);
+            opacity: 1;
+        }
+        .auth-card {
+            width: min(440px, 100%);
+            max-height: calc(100vh - 48px);
+            overflow-x: hidden;
+            overflow-y: auto;
+            background: #fff;
+            border: 1px solid rgba(20, 90, 50, .1);
+            border-radius: 24px;
+            box-shadow: 0 30px 70px rgba(17, 48, 59, 0.18), 0 4px 12px rgba(17, 48, 59, .06);
+            padding: 28px 32px 36px;
+            position: relative;
+        }
+        .auth-card::before {
+            content: '';
+            position: absolute;
+            inset: 0 0 auto;
+            height: 4px;
+            background: linear-gradient(90deg, #0c5133, #f5c84c, #0e7a4c);
+        }
+        .auth-tabs {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            padding: 4px;
+            border-radius: 999px;
+            background: #eef3f6;
+            margin-bottom: 24px;
+            position: relative;
+        }
+        .auth-tabs a {
+            display: inline-flex;
+            justify-content: center;
+            align-items: center;
+            padding: 10px 0;
+            border-radius: 999px;
+            font-weight: 600;
+            text-decoration: none;
+            color: var(--text-muted);
+            transition: 0.3s ease;
+        }
+        .auth-tabs a.active {
+            background: linear-gradient(90deg, #0e7a4c, #0c613c);
+            color: #fff;
+        }
+        .welcome-text h3 {
+            color: #618A61;
+            margin: 0;
+            font-size: 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .welcome-text p {
+            margin: 4px 0 18px;
+            color: var(--text-muted);
+            display: flex;
+            text-align: center;
+            align-items: center;
+            justify-content: center;
+        }
+        .alert {
+            background: #fdecea;
+            color: #a12622;
+            border: 1px solid #fac2bc;
+            border-radius: 16px;
+            padding: 12px 16px;
+            font-size: 0.95rem;
+            margin-bottom: 16px;
+        }
+        form {
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+        }
+        label {
+            font-weight: 500;
+            font-size: 0.95rem;
+            display: block;
+            margin-bottom: 6px;
+        }
+        .input-field {
+            display: flex;
+            flex-direction: column;
+        }
+        .field-box {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 16px;
+            border-radius: 14px;
+            border: 1px solid var(--border-muted);
+            background: #f9fbfd;
+        }
+        .field-with-button {
+            gap: 6px;
+        }
+        .btn-check {
+            border: none;
+            border-radius: 10px;
+            padding: 10px 16px;
+            font-weight: 600;
+            background: #e3f2e9;
+            color: #0f6b43;
+            cursor: pointer;
+            transition: background 0.2s ease, color 0.2s ease;
+        }
+        .btn-check:hover:not(:disabled) {
+            background: #d6eadf;
+        }
+        .btn-check:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        .helper-text {
+            margin: 6px 0 0;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            min-height: 1.2rem;
+        }
+        .helper-text.error {
+            color: #b00020;
+        }
+        .helper-text.success {
+            color: #0f6b43;
+        }
+        .role-note {
+            margin: 8px 0 0;
+            font-size: 0.9rem;
+            color: #0f6b43;
+        }
+        .field-box input {
+            border: none;
+            background: transparent;
+            outline: none;
+            flex: 1;
+            font-size: 1rem;
+            color: var(--text-dark);
+            font-family: inherit;
+        }
+        .toggle-visibility {
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            padding: 0;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: #7b8a94;
+        }
+        .toggle-visibility:focus-visible {
+            outline: 2px solid #0f6b43;
+            outline-offset: 2px;
+        }
+        .toggle-visibility [data-icon-hide] {
+            display: none;
+        }
+        .toggle-visibility.is-visible [data-icon-show] {
+            display: none;
+        }
+        .toggle-visibility.is-visible [data-icon-hide] {
+            display: inline-flex;
+        }
+        .field-box svg {
+            width: 18px;
+            height: 18px;
+            flex-shrink: 0;
+            fill: #7b8a94;
+        }
+        .form-links {
+            display: flex;
+            justify-content: flex-end;
+            margin-top: -8px;
+            font-size: 0.9rem;
+        }
+        .form-links a {
+            color: var(--primary-green);
+            text-decoration: none;
+            font-weight: 500;
+        }
+        .form-links a:hover {
+            text-decoration: underline;
+        }
+        .btn-submit {
+            margin-top: 6px;
+            border: none;
+            border-radius: 16px;
+            padding: 13px 18px;
+            font-size: 1rem;
+            font-weight: 600;
+            color: #fff;
+            background: linear-gradient(90deg, #0f6b43, #0c5133);
+            cursor: pointer;
+            transition: 0.25s ease;
+        }
+        .btn-submit:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 15px 30px rgba(12, 81, 51, 0.25);
+        }
+        .page-footer {
+            text-align: center;
+            margin-top: 28px;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+        @media (max-width: 760px) {
+            .hero {
+                padding: 34px 20px 62px;
+            }
+            .hero-inner {
+                max-width: 100%;
+            }
+            .auth-area {
+                left: 0;
+                width: 100%;
+                padding: 16px;
+                background: rgba(248, 251, 249, .9);
+            }
+        }
+        @media (max-width: 520px) {
+            .hero {
+                min-height: 100vh;
+            }
+            .hero h1 {
+                font-size: 1.7rem;
+                line-height: 1.05;
+            }
+            .hero h2 {
+                font-size: 2rem;
+            }
+            .hero p {
+                font-size: 1rem;
+                line-height: 1.5;
+            }
+            .auth-card {
+                padding: 24px 20px 30px;
+                border-radius: 22px;
+            }
+        }
+    </style>
+</head>
+    <body class="hero-compressed">
+
+    <div class="page-shell">
+        <section class="hero">
+            <div class="hero-inner">
+                <img src="admin/assets/images/logo-ptc.png" alt="PTC Logo" class="hero-logo">
+                <h1>PATEROS TECHNOLOGICAL COLLEGE</h1>
+                <p>Gearing the way to your future!</p>
+                <h2>Academic Portal</h2>
+            </div>
+        </section>
+
+        <section class="auth-area">
+            <div class="auth-card">
+                <div class="auth-tabs">
+                    <a href="login.php?open=1">Login</a>
+                    <a href="register.php?open=1" class="active">Register</a>
+                </div>
+
+                <div class="welcome-text">
+                    <h3>Hi PTCian!</h3>
+                    <p>Sign up using your PTC email address to access your Academic Portal.</p>
+                </div>
+
+                <?php if ($err): ?>
+                    <div class="alert"><?= htmlspecialchars($err) ?></div>
+                <?php endif; ?>
+                <?php if ($msg && !$err): ?>
+                    <div class="alert" style="background:#e8f6ed;border-color:#b6e2c3;color:#1c6b34;">
+                        <?= htmlspecialchars($msg) ?>
+                    </div>
+                <?php endif; ?>
+
+                <form method="post" autocomplete="on" id="registration-form" data-email-verified="<?= ($prefilledFirst && $prefilledLast) ? '1' : '0'; ?>">
+                    <div class="input-field">
+                        <label for="email">Email Address</label>
+                        <div class="field-box field-with-button">
+                            <span class="material-symbols-rounded">mail</span>
+                            <input type="email" id="email" name="email" placeholder="you@paterostechnologicalcollege.edu.ph" value="<?= htmlspecialchars($_POST['email'] ?? '') ?>" required>
+                            <button type="button" class="btn-check" id="check-email">Check</button>
+                        </div>
+                        <p class="helper-text" data-email-helper><?= htmlspecialchars($emailHelperMessage); ?></p>
+                    </div>
+
+                    <input type="hidden" name="role" id="detected_role" value="<?= htmlspecialchars(strtolower($detectedRole)); ?>">
+
+                    <div class="input-field">
+                        <label for="firstname">First Name</label>
+                        <div class="field-box">
+                            <span class="material-symbols-rounded">person</span>
+                            <input type="text" id="firstname" name="firstname" placeholder="Juan" value="<?= htmlspecialchars($prefilledFirst); ?>" readonly>
+                        </div>
+                    </div>
+
+                    <div class="input-field">
+                        <label for="lastname">Last Name</label>
+                        <div class="field-box">
+                            <span class="material-symbols-rounded">person</span>
+                            <input type="text" id="lastname" name="lastname" placeholder="Dela Cruz" value="<?= htmlspecialchars($prefilledLast); ?>" readonly>
+                        </div>
+                        <p class="role-note" data-role-display><?= htmlspecialchars($roleDisplayText); ?></p>
+                    </div>
+
+                    <div class="input-field">
+                        <label for="password">Password</label>
+                        <div class="field-box">
+                            <span class="material-symbols-rounded">lock</span>
+                            <input type="password" id="password" name="password" placeholder="********" <?= ($prefilledFirst && $prefilledLast) ? '' : 'disabled'; ?> data-credential-input>
+                            <button
+                                type="button"
+                                class="toggle-visibility"
+                                data-password-toggle="#password"
+                                data-hidden-type="password"
+                                data-show-label="Show password"
+                                data-hide-label="Hide password"
+                                aria-pressed="false"
+                                aria-label="Show password"
+                                <?= ($prefilledFirst && $prefilledLast) ? '' : 'disabled'; ?>
+                            >
+                                <span class="material-symbols-rounded" data-icon-show>visibility</span>
+                                <span class="material-symbols-rounded" data-icon-hide>visibility_off</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="input-field">
+                        <label for="retype-password">Reenter Password</label>
+                        <div class="field-box">
+                            <span class="material-symbols-rounded">lock</span>
+                            <input type="password" id="retype_password" name="retype_password" placeholder="********" <?= ($prefilledFirst && $prefilledLast) ? '' : 'disabled'; ?> data-credential-input>
+                            <button
+                                type="button"
+                                class="toggle-visibility"
+                                data-password-toggle="#retype_password"
+                                data-hidden-type="password"
+                                data-show-label="Show password confirmation"
+                                data-hide-label="Hide password confirmation"
+                                aria-pressed="false"
+                                aria-label="Show password confirmation"
+                                <?= ($prefilledFirst && $prefilledLast) ? '' : 'disabled'; ?>
+                            >
+                                <span class="material-symbols-rounded" data-icon-show>visibility</span>
+                                <span class="material-symbols-rounded" data-icon-hide>visibility_off</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="form-links">
+                        <a href="login.php?open=1">I have an existing account.</a>
+                    </div>
+
+                    <button type="submit" class="btn-submit" <?= ($prefilledFirst && $prefilledLast) ? '' : 'disabled'; ?> data-submit-button>Sign Up</button>
+                </form>
+
+                <div class="page-footer">
+                    Developed by BSIT 3OL Students<br>
+                    © <?= date('Y') ?> Pateros Technological College. All Rights Reserved.
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- <h2>Create an account</h2>
+      <?php if($err): ?><div style="color:#b00020;"><?= htmlspecialchars($err) ?></div><?php endif; ?>
+      <?php if($msg): ?>
+      <div style="color:green;"><?= $msg ?>
+      </div>
+      <form method="post" action="verify.php">
+        <label>Enter Code</label><br><input type="text" name="code" required><br>
+        <button type="submit">Verify</button>
+      </form>
+    <?php else: ?>
+      <form method="post">
+        <label>PTC Email</label><br><input type="email" name="email" required><br>
+        <label>Password</label><br><input type="password" name="password" required><br>
+        <button type="submit">Register</button>
+      </form>
+    <?php endif; ?>
+    <div><a href="login.php">Back to login</a></div> -->
+</body>
+<script>
+(function () {
+    const form = document.getElementById('registration-form');
+    if (!form) return;
+
+    const emailInput = document.getElementById('email');
+    const checkButton = document.getElementById('check-email');
+    const firstInput = document.getElementById('firstname');
+    const lastInput = document.getElementById('lastname');
+    const helper = document.querySelector('[data-email-helper]');
+    const roleDisplay = document.querySelector('[data-role-display]');
+    const hiddenRole = document.getElementById('detected_role');
+    const credentialInputs = form.querySelectorAll('[data-credential-input]');
+    const visibilityToggles = form.querySelectorAll('[data-password-toggle]');
+    const submitButton = form.querySelector('[data-submit-button]');
+    const toggleConfigs = [];
+
+    const notFoundMessage = "Invalid email address. Your email address doesn't exist in the database. Contact Registrar or MIS for assistance.";
+
+    const capitalize = (value) => value ? value.charAt(0).toUpperCase() + value.slice(1) : '';
+
+    const setHelper = (message, state) => {
+        if (!helper) return;
+        helper.textContent = message || '';
+        helper.classList.remove('error', 'success');
+        if (state === 'error') {
+            helper.classList.add('error');
+        } else if (state === 'success') {
+            helper.classList.add('success');
+        }
+    };
+
+    const updateRoleDisplay = (role) => {
+        if (!roleDisplay) return;
+        roleDisplay.textContent = role ? `Detected role: ${capitalize(role)}` : '';
+    };
+
+    const setCredentialState = (enabled) => {
+        credentialInputs.forEach((input) => {
+            input.disabled = !enabled;
+        });
+        visibilityToggles.forEach((toggle) => {
+            toggle.disabled = !enabled;
+        });
+        if (!enabled) {
+            toggleConfigs.forEach((config) => config.applyVisibility(false));
+        }
+        if (submitButton) {
+            submitButton.disabled = !enabled;
+        }
+    };
+
+    const fillNames = (first, last, role) => {
+        if (firstInput) {
+            firstInput.value = first || '';
+        }
+        if (lastInput) {
+            lastInput.value = last || '';
+        }
+        if (hiddenRole) {
+            hiddenRole.value = role || '';
+        }
+        updateRoleDisplay(role || '');
+    };
+
+    const initialVerified = form.dataset.emailVerified === '1';
+    if (initialVerified) {
+        setCredentialState(true);
+        updateRoleDisplay(hiddenRole.value || '');
+        if (helper && helper.textContent.trim() !== '') {
+            helper.classList.add('success');
+        }
+    } else {
+        setCredentialState(false);
+    }
+    if (!initialVerified && helper && helper.textContent.trim() !== '') {
+        if (helper.textContent.trim() === notFoundMessage) {
+            helper.classList.add('error');
+        }
+    }
+
+    const handleError = (message) => {
+        fillNames('', '', '');
+        setCredentialState(false);
+        setHelper(message || notFoundMessage, 'error');
+        form.dataset.emailVerified = '0';
+    };
+
+    if (visibilityToggles.length) {
+        visibilityToggles.forEach((toggle) => {
+            const targetSelector = toggle.getAttribute('data-password-toggle');
+            if (!targetSelector) return;
+            const input = document.querySelector(targetSelector);
+            if (!input) return;
+
+            const hiddenType = toggle.getAttribute('data-hidden-type') || 'password';
+            const visibleType = toggle.getAttribute('data-visible-type') || 'text';
+            const showLabel = toggle.getAttribute('data-show-label') || 'Show value';
+            const hideLabel = toggle.getAttribute('data-hide-label') || 'Hide value';
+
+            const applyVisibility = (show) => {
+                input.setAttribute('type', show ? visibleType : hiddenType);
+                toggle.classList.toggle('is-visible', show);
+                toggle.setAttribute('aria-pressed', show ? 'true' : 'false');
+                toggle.setAttribute('aria-label', show ? hideLabel : showLabel);
+            };
+
+            toggle.addEventListener('click', () => {
+                if (toggle.disabled) return;
+                const shouldShow = input.getAttribute('type') === hiddenType;
+                applyVisibility(shouldShow);
+            });
+
+            toggleConfigs.push({ applyVisibility });
+            applyVisibility(false);
+        });
+    }
+
+    if (checkButton) {
+        checkButton.addEventListener('click', () => {
+            const email = (emailInput ? emailInput.value.trim() : '').toLowerCase();
+            if (!email) {
+                handleError('Please enter your PTC email address first.');
+                return;
+            }
+
+            emailInput.value = email;
+            setHelper('Checking email...', null);
+            checkButton.disabled = true;
+
+            fetch('ajax/check_ptc_email.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ email })
+            })
+                .then((response) => response.json())
+                .then((payload) => {
+                    if (payload.redirect) {
+                        window.location.href = payload.redirect;
+                        return;
+                    }
+                    if (!payload.ok) {
+                        handleError(payload.message || notFoundMessage);
+                        return;
+                    }
+                    const data = payload.data || {};
+                    const detectedRole = (data.role || '').toLowerCase();
+                    fillNames(data.first_name || '', data.last_name || '', detectedRole);
+                    setCredentialState(true);
+                    setHelper('Email verified as ' + (detectedRole || 'student') + ' account.', 'success');
+                    form.dataset.emailVerified = '1';
+                })
+                .catch(() => {
+                    handleError('Unable to verify this email right now. Please try again.');
+                })
+                .finally(() => {
+                    checkButton.disabled = false;
+                });
+        });
+    }
+})();
+</script>
+</html>
