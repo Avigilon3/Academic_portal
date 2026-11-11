@@ -182,7 +182,7 @@ require_once 'core/config/config.php';
 			*, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 		}
 	</style>
-<link rel="icon" type="image/png" href="<?php echo htmlspecialchars(BASE_URL . '/admin/assets/images/logo-ptc.png', ENT_QUOTES, 'UTF-8'); ?>" sizes="32x32">
+<link rel="icon" type="image/png" href="<?php echo htmlspecialchars(BASE_URL . '/admin/assets/images/logo-ptc.png', ENT_QUOTES, 'UTF-8'); ?>">
 <link rel="stylesheet" href="dist/tailwind.css">
 
 </head>

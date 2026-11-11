@@ -115,6 +115,7 @@ $csrfToken = csrf_token();
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Verification | Academic Portal</title>
+    <link rel="icon" type="image/png" href="<?php echo htmlspecialchars(BASE_URL . '/admin/assets/images/logo-ptc.png', ENT_QUOTES, 'UTF-8'); ?>">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Arimo:ital,wght@0,400..700;1,400..700&family=Bayon&family=Space+Grotesk:wght@300..700&display=swap">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0" />
     <style>

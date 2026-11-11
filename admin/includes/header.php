@@ -123,7 +123,7 @@ if (function_exists('adminIsLoggedIn') && adminIsLoggedIn() && isset($pdo)) {
     }
   }
 </style>
-<link rel="icon" type="image/png" href="assets/images/logo-ptc.png" sizes="32x32">
+<link rel="icon" type="image/png" href="<?= htmlspecialchars(BASE_URL . '/admin/assets/images/logo-ptc.png', ENT_QUOTES, 'UTF-8'); ?>">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0">
 <script src="../../core/assets/sidebar-menu.js" defer></script>
 <header>

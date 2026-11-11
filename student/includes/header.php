@@ -74,6 +74,7 @@ if (function_exists('isLoggedIn') && isLoggedIn() && isset($pdo)) {
 <link rel="stylesheet" href="../../dist/tailwind.css">
 <link rel="stylesheet" href="../../core/assets/portal-shell.css?v=20261112.1">
 <script type="module" src="../../dist/portal-ui.js"></script>
+<link rel="icon" type="image/png" href="<?= htmlspecialchars(BASE_URL . '/admin/assets/images/logo-ptc.png', ENT_QUOTES, 'UTF-8'); ?>">
 <style>
   .feedback-toast {
     position: fixed !important;
