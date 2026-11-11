@@ -6,6 +6,8 @@ $currentUserId = $_SESSION['user']['id'] ?? null;
 $studentFullName = '';
 $studentEmail = '';
 $studentNumber = '';
+$passwordErrors = [];
+$passwordNotice = '';
 
 if ($currentUserId) {
     try {
@@ -40,6 +42,38 @@ if ($studentFullName === '' && function_exists('currentUserName')) {
 }
 if ($studentEmail === '' && !empty($_SESSION['user']['email'])) {
     $studentEmail = $_SESSION['user']['email'];
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'change_password') {
+    $currentPassword = (string)($_POST['current_password'] ?? '');
+    $newPassword = (string)($_POST['new_password'] ?? '');
+    $confirmPassword = (string)($_POST['confirm_password'] ?? '');
+
+    try {
+        $passwordStmt = $pdo->prepare('SELECT password_hash FROM users WHERE id = ? LIMIT 1');
+        $passwordStmt->execute([(int)$currentUserId]);
+        $passwordHash = $passwordStmt->fetchColumn();
+
+        if (!is_string($passwordHash) || $passwordHash === '' || !password_verify($currentPassword, $passwordHash)) {
+            $passwordErrors[] = 'Current password is incorrect.';
+        }
+        if (strlen($newPassword) < 8) {
+            $passwordErrors[] = 'New password must be at least 8 characters.';
+        }
+        if ($newPassword !== $confirmPassword) {
+            $passwordErrors[] = 'New password and confirmation do not match.';
+        }
+
+        if (!$passwordErrors) {
+            $newHash = password_hash($newPassword, PASSWORD_DEFAULT);
+            $updatePassword = $pdo->prepare('UPDATE users SET password_hash = ? WHERE id = ?');
+            $updatePassword->execute([$newHash, (int)$currentUserId]);
+            $passwordNotice = 'Password changed successfully.';
+        }
+    } catch (Throwable $error) {
+        error_log('Student password update failed: ' . $error->getMessage());
+        $passwordErrors[] = 'The password could not be changed right now. Please try again.';
+    }
 }
 ?>
 
@@ -90,7 +124,20 @@ if ($studentEmail === '' && !empty($_SESSION['user']['email'])) {
                 <span class="material-symbols-rounded">settings</span>
                 <h3>Change Password</h3>
               </div>
+              <?php if ($passwordNotice): ?>
+                <div class="feedback-toast feedback-toast-success" role="status" aria-live="polite"><?= htmlspecialchars($passwordNotice); ?></div>
+              <?php endif; ?>
+              <?php if ($passwordErrors): ?>
+                <div class="feedback-toast feedback-toast-error" role="alert">
+                  <ul>
+                    <?php foreach ($passwordErrors as $passwordError): ?>
+                      <li><?= htmlspecialchars($passwordError); ?></li>
+                    <?php endforeach; ?>
+                  </ul>
+                </div>
+              <?php endif; ?>
               <form method="post">
+                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8'); ?>">
                 <input type="hidden" name="action" value="change_password">
                 <label>Current Password</label>
                 <input class="form-control" type="password" name="current_password" required>

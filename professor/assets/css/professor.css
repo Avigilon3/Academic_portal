@@ -1783,3 +1783,299 @@ header {
         padding: 12px;
     }
 }
+
+.dashboard-stats .stat-detail {
+    margin: 0;
+    color: #708077;
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.grading-score-progress {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0 0 12px;
+    padding: 11px 14px;
+    border: 1px solid #dfe8e2;
+    border-radius: 8px;
+    background: #f7faf8;
+    color: #315844;
+}
+
+.grading-score-progress > .material-symbols-rounded {
+    flex: 0 0 auto;
+    font-size: 21px;
+}
+
+.grading-score-progress > span:last-child {
+    display: grid;
+    gap: 3px;
+}
+
+.grading-score-progress strong {
+    font-size: 13px;
+}
+
+.grading-score-progress small {
+    color: #596b61;
+    font-size: 12px;
+}
+
+.grading-score-progress[data-invalid="true"] {
+    border-color: #e7b6b6;
+    background: #fff6f6;
+    color: #9f3535;
+}
+
+.grading-score-progress[data-invalid="true"] small {
+    color: #9f3535;
+}
+
+.grade-input:focus-visible {
+    outline: 2px solid #1b5e3a;
+    outline-offset: 1px;
+}
+
+.grade-input:invalid {
+    border-color: #c24141;
+    background: #fff6f6;
+}
+
+.grading-table-scroll {
+    max-height: min(68vh, 760px);
+    overflow: auto;
+    overscroll-behavior: contain;
+    scroll-padding-top: 12px;
+}
+
+.grading-sheet-table thead th {
+    position: sticky;
+    z-index: 4;
+    background: #edf5ef;
+    box-shadow: 0 1px 0 #dce8e1;
+}
+
+.grading-sheet-table thead tr:first-child th {
+    top: 0;
+}
+
+.grading-sheet-table thead tr:nth-child(2) th {
+    top: 48px;
+    z-index: 3;
+}
+
+.grading-sheet-table .component-header {
+    background-color: #e6f3e9;
+}
+
+.grading-sheet-table tbody tr:hover {
+    background: rgba(236, 253, 245, .45);
+}
+
+.grading-sheet-table .grade-input {
+    min-width: 76px;
+    min-height: 40px;
+    border-radius: 9px;
+    font-variant-numeric: tabular-nums;
+    transition: border-color .16s ease, box-shadow .16s ease, background .16s ease;
+}
+
+.grading-sheet-table .grade-input:focus-visible {
+    border-color: #1b5e3a;
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(27, 94, 58, .16);
+}
+
+.grade-outcome-preview {
+    display: inline-flex;
+    min-height: 24px;
+    align-items: center;
+    justify-content: center;
+    margin-top: 5px;
+    padding: 3px 9px;
+    border: 1px solid #dce8e1;
+    border-radius: 999px;
+    background: #f3f6f4;
+    color: #64746a;
+    font-size: 10px;
+    font-weight: 750;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+
+.grade-outcome-preview--pass {
+    border-color: #b6dfc3;
+    background: #ecfdf5;
+    color: #17613a;
+}
+
+.grade-outcome-preview--fail,
+.grade-outcome-preview--invalid {
+    border-color: #f0c3bd;
+    background: #fff3f1;
+    color: #9c3d32;
+}
+
+.grading-submit-confirmation {
+    width: min(500px, calc(100vw - 32px));
+    max-width: none;
+    padding: 0;
+    border: 1px solid rgba(255, 255, 255, .9);
+    border-radius: 20px;
+    background: rgba(255, 255, 255, .97);
+    color: #203a2b;
+    box-shadow: 0 24px 70px rgba(15, 35, 24, .26);
+}
+
+.grading-submit-confirmation::backdrop {
+    background: rgba(12, 32, 21, .5);
+    backdrop-filter: blur(4px);
+}
+
+.grading-submit-confirmation__card {
+    display: grid;
+    gap: 12px;
+    padding: 25px;
+}
+
+.grading-submit-confirmation__card > .material-symbols-rounded {
+    display: grid;
+    width: 48px;
+    height: 48px;
+    place-items: center;
+    border-radius: 15px;
+    background: #e9f6ed;
+    color: #1b5e3a;
+    font-size: 26px;
+}
+
+.grading-submit-confirmation__card h2,
+.grading-submit-confirmation__card p {
+    margin: 0;
+}
+
+.grading-submit-confirmation__card h2 {
+    color: #14472c;
+    font-size: 20px;
+}
+
+.grading-submit-confirmation__card p {
+    color: #596c60;
+    line-height: 1.6;
+}
+
+.grading-submit-confirmation__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 9px;
+    margin-top: 6px;
+}
+
+.grading-submit-confirmation__actions button {
+    min-height: 40px;
+    padding: 8px 14px;
+    border: 1px solid #dce8e1;
+    border-radius: 10px;
+    background: #fff;
+    color: #365341;
+    cursor: pointer;
+    font: inherit;
+    font-weight: 650;
+}
+
+.grading-submit-confirmation__actions [data-grading-confirm-continue] {
+    border-color: #1b5e3a;
+    background: #1b5e3a;
+    color: #fff;
+}
+
+@media (max-width: 640px) {
+    .grading-table-scroll {
+        max-height: 64vh;
+    }
+
+    .grading-sheet-table th,
+    .grading-sheet-table td {
+        padding: 9px 7px;
+    }
+}
+
+.dashboard-classes {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 290px), 1fr));
+    gap: 14px;
+}
+
+.class-pill {
+    min-width: 0;
+    align-items: flex-start;
+    border-color: #dce8e1;
+    background: rgba(255, 255, 255, .9);
+}
+
+.class-pill__title {
+    color: #14472c;
+    font-family: "Plus Jakarta Sans", Inter, Arial, sans-serif;
+}
+
+.class-pill__meta {
+    display: inline-flex;
+    margin-top: 6px;
+    padding: 4px 9px;
+    border-radius: 999px;
+    background: #ecfdf5;
+    color: #1b5e3a;
+    font-size: 11px;
+    font-weight: 650;
+}
+
+.dashboard-section .section-header {
+    margin-bottom: 14px;
+}
+
+.dashboard-section .link-muted {
+    color: #1b5e3a;
+}
+
+.deadline-list {
+    border: 1px solid #dce8e1;
+    border-radius: 18px;
+    background: rgba(255, 255, 255, .9);
+    box-shadow: 0 12px 30px rgba(20, 71, 44, .07);
+}
+
+.deadline-item {
+    border: 1px solid transparent;
+    border-radius: 12px;
+}
+
+.deadline-upcoming {
+    border-color: #f0dfb2;
+    background: #fff8e6;
+    color: #775600;
+}
+
+.deadline-later {
+    border-color: #d6e7dc;
+    background: #eff8f2;
+    color: #285a3d;
+}
+
+.empty-state-card {
+    border: 1px dashed #cdded2;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, .66);
+    color: #65766c;
+}
+
+@media (max-width: 640px) {
+    .class-pill {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+    }
+
+    .class-pill .btn {
+        align-self: flex-start;
+    }
+}

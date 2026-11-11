@@ -923,7 +923,7 @@ foreach ($chartBars as $bar) {
         </div>
     </main>
 </div>
-<script src="../../core/assets/announcement-interactions.js?v=20261109.1" defer></script>
+<script src="../../core/assets/announcement-interactions.js?v=20261112.1" defer></script>
 <script src="../assets/js/student.js?v=20261006.2"></script>
 </body>
 </html>

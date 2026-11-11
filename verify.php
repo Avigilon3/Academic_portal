@@ -15,6 +15,12 @@ if (!$pending) {
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!is_valid_csrf_token($_POST['csrf_token'] ?? null)) {
+        set_flash('error', 'Your session expired. Refresh the page and try again.');
+        header('Location: ' . BASE_URL . '/verify.php');
+        exit;
+    }
+
     $code = trim($_POST['code'] ?? '');
     $email = $pending['email'];
 
@@ -34,16 +40,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
-    $hash = password_hash($pending['password'], PASSWORD_BCRYPT);
+    $hash = $pending['password_hash'] ?? password_hash((string)($pending['password'] ?? ''), PASSWORD_BCRYPT);
     $first = $pending['first_name'] ?? ($u['first_name'] ?? '');
     $last  = $pending['last_name'] ?? ($u['last_name'] ?? '');
     $role  = $pending['role'] ?? ($u['role'] ?? 'student');
 
-    $upd = $pdo->prepare('UPDATE users SET password_hash=?, verify_code=NULL, first_name=?, last_name=?, role=?, status=? WHERE id=?');
-    $upd->execute([$hash, $first, $last, $role, 'ACTIVE', $u['id']]);
+    try {
+        $pdo->beginTransaction();
+        $upd = $pdo->prepare('UPDATE users SET password_hash=?, verify_code=NULL, first_name=?, last_name=?, role=?, status=? WHERE id=?');
+        $upd->execute([$hash, $first, $last, $role, 'ACTIVE', $u['id']]);
+        $pdo->commit();
+    } catch (Throwable $exception) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        error_log('Account verification update failed: ' . $exception->getMessage());
+        set_flash('error', 'We could not verify your account right now. Please try again.');
+        header('Location: ' . BASE_URL . '/verify.php');
+        exit;
+    }
 
     unset($_SESSION['pending_reg']);
 
+    regenerate_authenticated_session();
     $_SESSION['user'] = [
         'id'    => $u['id'],
         'email' => $email,
@@ -86,6 +105,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     header('Location: ' . BASE_URL . '/student/index.php');
     exit;
 }
+$csrfToken = csrf_token();
 ?>
 
 <!DOCTYPE html>
@@ -348,6 +368,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
     </style>
+    <link rel="stylesheet" href="dist/tailwind.css">
 </head>
 <body>
     <div class="page-shell">
@@ -385,6 +406,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <p>We sent a 6-digit code to <strong><?= htmlspecialchars($pending['email']) ?></strong>. Enter it below to complete your registration.</p>
 
                 <form method="post" autocomplete="off">
+                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8'); ?>">
                     <div class="input-field">
                         <label for="code">Verification Code</label>
                         <div class="field-box">

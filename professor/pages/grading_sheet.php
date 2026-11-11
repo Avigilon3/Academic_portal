@@ -7,6 +7,7 @@ $professor = requireProfessorRecord($pdo);
 $professorId = (int)$professor['id'];
 $sheetId = isset($_GET['sheet_id']) ? (int)$_GET['sheet_id'] : 0;
 $noSheetsAssigned = false;
+$hasPendingEditRequest = false;
 
 $redirectWithMessage = function (string $message): void {
     set_flash('error', $message);
@@ -131,8 +132,8 @@ if (!$noSheetsAssigned) {
 
     $studentIds = array_column($students, 'id');
     $gradeMap = [];
+    $gradeItemIds = [];
     if ($studentIds && $componentIds) {
-        $gradeItemIds = [];
         foreach ($items as $rows) {
             foreach ($rows as $item) {
                 $gradeItemIds[] = (int)$item['id'];
@@ -152,6 +153,15 @@ if (!$noSheetsAssigned) {
                     'id' => (int)$row['id'],
                     'score' => $row['score'],
                 ];
+            }
+        }
+    }
+    $scoreEntryTotal = count($students) * count($gradeItemIds);
+    $scoreEntryCount = 0;
+    foreach ($gradeMap as $studentGrades) {
+        foreach ($studentGrades as $grade) {
+            if ($grade['score'] !== null && $grade['score'] !== '') {
+                $scoreEntryCount++;
             }
         }
     }
@@ -230,8 +240,26 @@ if (!$noSheetsAssigned) {
     }
 
     $isLocked = !$isEditable;
+    if ($isLocked && !$canSelfEditSubmitted) {
+        $pendingRequestStmt = $pdo->prepare(
+            "SELECT id
+               FROM edit_requests
+              WHERE grading_sheet_id = ?
+                AND professor_id = ?
+                AND status = 'pending'
+              LIMIT 1"
+        );
+        $pendingRequestStmt->execute([$sheetId, $professorId]);
+        $hasPendingEditRequest = (bool)$pendingRequestStmt->fetchColumn();
+    }
 
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        if (!is_valid_csrf_token($_POST['csrf_token'] ?? null)) {
+            set_flash('error', 'Your session expired. Refresh and try again.');
+            header('Location: ./grading_sheet.php?sheet_id=' . $sheetId);
+            exit;
+        }
+
         if (!$isEditable) {
             set_flash('error', 'This grading sheet is already submitted or locked. Please request a reopen to make changes.');
             header('Location: ./grading_sheet.php?sheet_id=' . $sheetId);
@@ -248,8 +276,8 @@ if (!$noSheetsAssigned) {
         $updateStmt = $pdo->prepare('UPDATE grades SET score = ? WHERE id = ?');
         $deleteStmt = $pdo->prepare('DELETE FROM grades WHERE id = ?');
 
-        $pdo->beginTransaction();
         try {
+            $pdo->beginTransaction();
             foreach ($students as $student) {
                 $studentId = (int)$student['id'];
                 $studentGrades = $gradesInput[$studentId] ?? [];
@@ -268,10 +296,18 @@ if (!$noSheetsAssigned) {
                         }
 
                         if (!is_numeric($scoreRaw)) {
-                            throw new RuntimeException('Scores must be numeric values.');
+                            throw new InvalidArgumentException('Scores must be numeric values.');
                         }
 
-                        $score = (int)round((float)$scoreRaw);
+                        $scoreValue = (float)$scoreRaw;
+                        $maxScore = (float)$item['total_points'];
+                        if ($scoreValue < 0 || $scoreValue > $maxScore) {
+                            throw new InvalidArgumentException(
+                                'Scores must be between 0 and ' . number_format($maxScore, 0) . ' points.'
+                            );
+                        }
+
+                        $score = (int)round($scoreValue);
                         if ($existing) {
                             $updateStmt->execute([$score, $existing['id']]);
                         } else {
@@ -291,9 +327,17 @@ if (!$noSheetsAssigned) {
 
             $pdo->commit();
             set_flash('success', $newStatus === 'submitted' ? 'Grading sheet submitted.' : 'Draft saved.');
-        } catch (Throwable $e) {
-            $pdo->rollBack();
+        } catch (InvalidArgumentException $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
             set_flash('error', 'Unable to save grades: ' . $e->getMessage());
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            error_log('Professor grading sheet save failed: ' . $e->getMessage());
+            set_flash('error', 'Unable to save grades right now. Please try again or contact the registrar.');
         }
 
     $redirectUrl = './grading_sheet.php?sheet_id=' . $sheetId;
@@ -318,6 +362,8 @@ if (!$noSheetsAssigned) {
     $students = [];
     $studentSummaries = [];
     $gradeMap = [];
+    $scoreEntryTotal = 0;
+    $scoreEntryCount = 0;
     $sheetStatus = null;
     $submittedAt = null;
     $deadlineAt = null;
@@ -335,7 +381,7 @@ if (!$noSheetsAssigned) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Grading Sheet</title>
-    <link rel="stylesheet" href="../assets/css/professor.css?v=20260916.1">
+    <link rel="stylesheet" href="../assets/css/professor.css?v=20261112.1">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0" />
 </head>
 <body
@@ -343,6 +389,7 @@ if (!$noSheetsAssigned) {
     data-sheet-id="<?= $sheetId; ?>"
     data-sheet-editable="<?= $isEditable ? '1' : '0'; ?>"
     data-section-name="<?= htmlspecialchars($sheet['section_name'] ?? ''); ?>"
+    data-csrf-token="<?= htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8'); ?>"
 >
 <?php include '../includes/header.php'; ?>
 <div class="layout">
@@ -390,6 +437,11 @@ if (!$noSheetsAssigned) {
                     <?php else: ?>
                         This grading sheet is locked by the registrar. You can view grades but cannot make changes.
                     <?php endif; ?>
+                    <?php if (!$canSelfEditSubmitted): ?>
+                        <a class="btn secondary" href="./requests.php?grading_sheet_id=<?= $sheetId; ?>">
+                            <?= $hasPendingEditRequest ? 'View pending request' : 'Request edit access'; ?>
+                        </a>
+                    <?php endif; ?>
                 </div>
             <?php elseif ($sheetStatus === 'reopened'): ?>
                 <div class="alert alert-info">This grading sheet has been reopened. Please make changes and resubmit.</div>
@@ -408,6 +460,23 @@ if (!$noSheetsAssigned) {
                     </div>
                 <?php endif; ?>
                 <form method="post" id="grading-sheet-form">
+                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8'); ?>">
+                    <?php if ($isEditable && $hasGradeItems): ?>
+                        <div
+                            class="grading-score-progress"
+                            data-score-progress
+                            data-entered="<?= (int)$scoreEntryCount; ?>"
+                            data-total="<?= (int)$scoreEntryTotal; ?>"
+                            role="status"
+                            aria-live="polite"
+                        >
+                            <span class="material-symbols-rounded" aria-hidden="true">fact_check</span>
+                            <span>
+                                <strong>Score entry progress</strong>
+                                <small data-score-progress-label><?= (int)$scoreEntryCount; ?> of <?= (int)$scoreEntryTotal; ?> scores entered</small>
+                            </span>
+                        </div>
+                    <?php endif; ?>
                     <div class="grading-table-card">
                         <div class="grading-table-scroll" role="region" aria-label="Grading sheet table">
                             <table class="grading-sheet-table">
@@ -426,7 +495,7 @@ if (!$noSheetsAssigned) {
                                         ? 'style="background:' . htmlspecialchars($palette['bg']) . ';border-color:' . htmlspecialchars($palette['border']) . ';color:' . htmlspecialchars($palette['text']) . ';"'
                                         : '';
                                 ?>
-                                <th colspan="<?= $colspan; ?>" class="component-header" <?= $styleAttr; ?>>
+                                <th colspan="<?= $colspan; ?>" class="component-header" data-grade-weight="<?= htmlspecialchars(number_format((float)$component['weight'], 4, '.', '')); ?>" <?= $styleAttr; ?>>
                                     <span class="component-title"><?= htmlspecialchars($component['name']); ?></span>
                                     <span class="component-weight"><?= htmlspecialchars($weightLabel ?: '0'); ?>%</span>
                                     <?php if ($isEditable): ?>
@@ -509,6 +578,7 @@ if (!$noSheetsAssigned) {
                                     <?php if ($componentItems): ?>
                                         <?php foreach ($componentItems as $item): ?>
                                             <?php
+                                                $itemPoints = (int)round((float)($item['total_points'] ?? 0));
                                                 $grade = $gradeMap[$student['id']][$item['id']]['score'] ?? '';
                                                 $gradeDisplay = $grade;
                                                 if ($gradeDisplay !== '' && $gradeDisplay !== null) {
@@ -522,8 +592,11 @@ if (!$noSheetsAssigned) {
                                                     value="<?= htmlspecialchars($gradeDisplay); ?>"
                                                     step="1"
                                                     min="0"
+                                                    max="<?= htmlspecialchars(number_format($itemPoints, 0, '.', '')); ?>"
                                                     <?= $isEditable ? '' : 'readonly'; ?>
                                                     class="grade-input"
+                                                    data-grade-score-input
+                                                    aria-label="<?= htmlspecialchars('Score for ' . $student['first_name'] . ' ' . $student['last_name'] . ', ' . $item['title'], ENT_QUOTES, 'UTF-8'); ?>"
                                                 >
                                             </td>
                                         <?php endforeach; ?>

@@ -157,7 +157,7 @@ function dueText(?string $date): string
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
             <title>Professor Portal Dashboard</title>
-        <link rel="stylesheet" href="../assets/css/professor.css?v=20261006.3">
+        <link rel="stylesheet" href="../assets/css/professor.css?v=20261112.1">
         <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0" />
     </head>
 <body>
@@ -243,10 +243,10 @@ function dueText(?string $date): string
       <section class="dashboard-stats">
           <?php
               $statCards = [
-                  ['label' => 'Total Classes', 'value' => $totalClasses, 'icon' => 'menu_book'],
-                  ['label' => 'Total Students', 'value' => $totalStudents, 'icon' => 'groups_2'],
-                  ['label' => 'Pending Grades', 'value' => $pendingGrades, 'icon' => 'schedule'],
-                  ['label' => 'Submitted Sheets', 'value' => $submittedSheets, 'icon' => 'task_alt'],
+                  ['label' => 'Total Classes', 'value' => $totalClasses, 'detail' => 'Assigned section and subject pairs', 'icon' => 'menu_book'],
+                  ['label' => 'Total Students', 'value' => $totalStudents, 'detail' => 'Unique students across your classes', 'icon' => 'groups_2'],
+                  ['label' => 'Pending Grades', 'value' => $pendingGrades, 'detail' => 'Draft and reopened sheets', 'icon' => 'schedule'],
+                  ['label' => 'Submitted Sheets', 'value' => $submittedSheets, 'detail' => 'Submitted or locked sheets', 'icon' => 'task_alt'],
               ];
           ?>
           <?php foreach ($statCards as $card): ?>
@@ -254,7 +254,8 @@ function dueText(?string $date): string
 
                   <div class="stat-text">
                   <p class="stat-label"><?= htmlspecialchars($card['label']); ?></p>
-                  <p class="stat-value"><?= (int)$card['value']; ?></p>
+                  <p class="stat-value" data-tabular-nums><?= (int)$card['value']; ?></p>
+                  <p class="stat-detail"><?= htmlspecialchars($card['detail'], ENT_QUOTES, 'UTF-8'); ?></p>
                   </div>
 
                   <div class="stat-icon">
@@ -336,7 +337,7 @@ function dueText(?string $date): string
       </section>
   </main>
 </div>
-<script src="../../core/assets/announcement-interactions.js?v=20261109.1" defer></script>
+<script src="../../core/assets/announcement-interactions.js?v=20261112.1" defer></script>
 <script src="../assets/js/professor.js?v=20260916.1"></script>
 </body>
 <?php include '../includes/footer.php'; ?>

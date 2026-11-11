@@ -47,6 +47,7 @@
         replyButton.type = 'button';
         replyButton.className = 'portal-announcement__reply-toggle';
         replyButton.dataset.replyToggle = String(meta.id);
+        replyButton.setAttribute('aria-expanded', 'false');
         replyButton.textContent = 'Reply';
         actions.appendChild(replyButton);
         item.appendChild(actions);
@@ -187,6 +188,7 @@
                 var form = comment ? comment.querySelector('.portal-announcement__reply-form') : null;
                 if (form) {
                     form.hidden = !form.hidden;
+                    replyToggle.setAttribute('aria-expanded', form.hidden ? 'false' : 'true');
                     if (!form.hidden) {
                         var textarea = form.querySelector('textarea');
                         if (textarea) textarea.focus();

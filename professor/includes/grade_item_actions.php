@@ -13,6 +13,10 @@ try {
         jsonResponse(405, ['success' => false, 'message' => 'Method not allowed.']);
     }
 
+    if (!is_valid_csrf_token($_POST['csrf_token'] ?? null)) {
+        jsonResponse(403, ['success' => false, 'message' => 'Your session expired. Refresh and try again.']);
+    }
+
     $action = $_POST['action'] ?? '';
     if (!in_array($action, ['create', 'update', 'delete'], true)) {
         throw new RuntimeException('Unsupported action.');

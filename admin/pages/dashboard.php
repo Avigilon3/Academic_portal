@@ -137,17 +137,26 @@ try {
     'professors'      => (int)$pdo->query('SELECT COUNT(*) FROM professors')->fetchColumn(),
     'sections'        => (int)$pdo->query('SELECT COUNT(*) FROM sections')->fetchColumn(),
     'submittedSheets' => (int)$pdo->query("SELECT COUNT(*) FROM grading_sheets WHERE status='submitted'")->fetchColumn(),
+    'totalSheets'     => (int)$pdo->query('SELECT COUNT(*) FROM grading_sheets')->fetchColumn(),
     'pendingRequests' => (int)$pdo->query("SELECT COUNT(*) FROM edit_requests WHERE status='pending'")->fetchColumn(),
+    'pendingDocumentRequests' => (int)$pdo->query("SELECT COUNT(*) FROM document_requests WHERE status='pending'")->fetchColumn(),
   ];
-} catch (Exception $e) {
+} catch (Throwable $e) {
+  error_log('Admin dashboard metrics failed: ' . $e->getMessage());
   $stats = [
     'students' => 0,
     'professors' => 0,
     'sections' => 0,
     'submittedSheets' => 0,
+    'totalSheets' => 0,
     'pendingRequests' => 0,
+    'pendingDocumentRequests' => 0,
   ];
 }
+$stats['submissionRate'] = $stats['totalSheets'] > 0
+  ? (int)round(($stats['submittedSheets'] / $stats['totalSheets']) * 100)
+  : 0;
+$pendingActionCount = $stats['pendingRequests'] + $stats['pendingDocumentRequests'];
 
 // Build last-7-days submission stats and WoW delta
 $chart = [
@@ -223,12 +232,28 @@ try {
   } else {
     $chart['deltaPct'] = $chart['total'] > 0 ? 100.0 : 0.0;
   }
-} catch (Exception $e) {
-  // leave defaults
+} catch (Throwable $e) {
+  error_log('Admin dashboard submission chart failed: ' . $e->getMessage());
 }
 
 $recentAnnouncements = [];
 $announcementAudience = ['student' => [], 'professor' => []];
+$recentActivity = [];
+$recentActivityError = false;
+try {
+  $activityStmt = $pdo->query(
+    "SELECT a.action, a.details, a.created_at,
+            COALESCE(NULLIF(TRIM(CONCAT_WS(' ', u.first_name, u.last_name)), ''), NULLIF(u.email, ''), 'System') AS actor
+       FROM activity_logs a
+       LEFT JOIN users u ON u.id = a.user_id
+      ORDER BY a.created_at DESC, a.id DESC
+      LIMIT 5"
+  );
+  $recentActivity = $activityStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+} catch (Throwable $error) {
+  error_log('Admin dashboard recent activity failed: ' . $error->getMessage());
+  $recentActivityError = true;
+}
 try {
   $announcementStmt = $pdo->query(
      "SELECT title, body, created_at AS published_at
@@ -260,11 +285,12 @@ try {
 }
 ?>
 <!DOCTYPE html>
-<html>
+<html lang="en">
   <head>
     <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
       <title>Dashboard</title>
-    <link rel="stylesheet" href="../assets/css/admin.css?v=20261109.1">
+    <link rel="stylesheet" href="../assets/css/admin.css?v=20261111.1">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0" />
   </head>
 <body>
@@ -280,20 +306,22 @@ try {
     </div>
 
     <?php
-      $dashboardCards = [
-        ['label' => 'Total Students', 'value' => (int)$stats['students'], 'icon' => 'school'],
-        ['label' => 'Total Professors', 'value' => (int)$stats['professors'], 'icon' => 'group'],
-        ['label' => 'Total Sections', 'value' => (int)$stats['sections'], 'icon' => 'class'],
-        ['label' => 'Submitted Sheets', 'value' => (int)$stats['submittedSheets'], 'icon' => 'task_alt'],
-        ['label' => 'Pending Requests', 'value' => (int)$stats['pendingRequests'], 'icon' => 'pending_actions'],
-      ];
+        $dashboardCards = [
+          ['label' => 'Total Students', 'value' => $stats['students'], 'detail' => 'Student records in the portal', 'icon' => 'school'],
+          ['label' => 'Total Professors', 'value' => $stats['professors'], 'detail' => 'Professor records in the portal', 'icon' => 'group'],
+          ['label' => 'Total Sections', 'value' => $stats['sections'], 'detail' => 'Academic sections configured', 'icon' => 'class'],
+          ['label' => 'Submitted Sheets', 'value' => $stats['submittedSheets'], 'detail' => 'Grading sheets submitted', 'icon' => 'task_alt'],
+          ['label' => 'Pending Requests', 'value' => $pendingActionCount, 'detail' => 'Document and edit-access requests', 'icon' => 'pending_actions'],
+          ['label' => 'Submission Rate', 'value' => $stats['submissionRate'] . '%', 'detail' => $stats['submittedSheets'] . ' of ' . $stats['totalSheets'] . ' sheets submitted', 'icon' => 'donut_small'],
+        ];
     ?>
     <section class="dashboard-stats">
       <?php foreach ($dashboardCards as $card): ?>
         <article class="stat-card">
           <div class="stat-text">
             <p class="stat-label"><?= htmlspecialchars($card['label']); ?></p>
-            <p class="stat-value"><?= (int)$card['value']; ?></p>
+            <p class="stat-value" data-tabular-nums><?= htmlspecialchars((string)$card['value'], ENT_QUOTES, 'UTF-8'); ?></p>
+            <p class="stat-detail"><?= htmlspecialchars($card['detail'], ENT_QUOTES, 'UTF-8'); ?></p>
           </div>
           <div class="stat-icon">
             <span class="material-symbols-rounded"><?= htmlspecialchars($card['icon']); ?></span>
@@ -302,11 +330,17 @@ try {
       <?php endforeach; ?>
     </section>
 
+    <div class="dashboard-section-heading">
+      <h2 class="page-kicker">QUICK ACTIONS</h2>
+    </div>
     <section class="dashboard-quick-links" aria-label="Quick access">
       <a class="dashboard-quick-link" href="./report_management.php">
         <span class="dashboard-quick-link__icon material-symbols-rounded" aria-hidden="true">pending_actions</span>
         <span><strong>Review requests</strong><small>Handle pending professor and document requests</small></span>
-        <span class="material-symbols-rounded dashboard-quick-link__arrow" aria-hidden="true">arrow_forward</span>
+        <span class="dashboard-quick-link__end">
+          <?php if ($pendingActionCount > 0): ?><span class="dashboard-quick-link__badge"><?= (int)$pendingActionCount; ?></span><?php endif; ?>
+          <span class="material-symbols-rounded dashboard-quick-link__arrow" aria-hidden="true">arrow_forward</span>
+        </span>
       </a>
       <a class="dashboard-quick-link" href="./database_management.php">
         <span class="dashboard-quick-link__icon dashboard-quick-link__icon--blue material-symbols-rounded" aria-hidden="true">database</span>
@@ -436,6 +470,7 @@ try {
     </section>
 
     <!-- Submission statistics chart -->
+    <div class="dashboard-insights-grid">
     <div class="chart-card">
       <p class="chart-title">Grading Sheet Submission Statistics</p>
       <p class="chart-subtitle">Number of submissions in the last 7 days.</p>
@@ -446,9 +481,9 @@ try {
           $deltaSign = $delta > 0 ? '+' : ($delta < 0 ? '' : '');
           $deltaClass = $delta >= 0 ? 'chart-delta' : 'chart-delta' ; // keep same color; tweak if needed
         ?>
-        <div class="<?= $deltaClass ?>"><?= $deltaSign . $delta ?>%</div>
-      </div>
-      <div class="chart-legend">
+          <div class="<?= $deltaClass ?>"><?= $deltaSign . $delta ?>%</div>
+        </div>
+        <div class="chart-legend">
         <span><span class="legend-dot legend-dot--submitted"></span>Submitted</span>
         <span><span class="legend-dot legend-dot--pending"></span>Pending</span>
       </div>
@@ -484,6 +519,38 @@ try {
         <a class="button btn-outline" href="./reports.php">View Full Report</a>
         <a class="button" href="?download=submissions_csv">Download CSV</a>
       </div>
+    </div>
+    <section class="recent-activity-card" aria-labelledby="recent-activity-title">
+      <div class="recent-activity-card__heading">
+        <div>
+          <p class="page-kicker">SYSTEM UPDATES</p>
+          <h2 id="recent-activity-title">Recent activity</h2>
+        </div>
+        <a href="./activity_logs.php">View all</a>
+      </div>
+      <?php if ($recentActivityError): ?>
+        <p class="recent-activity-empty" role="status">Activity is temporarily unavailable.</p>
+      <?php elseif (!$recentActivity): ?>
+        <div class="recent-activity-empty" role="status">
+          <span class="material-symbols-rounded" aria-hidden="true">history</span>
+          <strong>No activity recorded yet</strong>
+          <span>Administrative updates will appear here.</span>
+        </div>
+      <?php else: ?>
+        <ol class="recent-activity-list">
+          <?php foreach ($recentActivity as $activity): ?>
+            <li class="recent-activity-item">
+              <span class="recent-activity-item__marker material-symbols-rounded" aria-hidden="true">history</span>
+              <div>
+                <strong><?= htmlspecialchars((string)$activity['action'], ENT_QUOTES, 'UTF-8'); ?></strong>
+                <p><?= htmlspecialchars((string)($activity['details'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></p>
+                <small><?= htmlspecialchars((string)$activity['actor'], ENT_QUOTES, 'UTF-8'); ?> · <?= htmlspecialchars(date('M j, g:i A', strtotime((string)$activity['created_at'])), ENT_QUOTES, 'UTF-8'); ?></small>
+              </div>
+            </li>
+          <?php endforeach; ?>
+        </ol>
+      <?php endif; ?>
+    </section>
     </div>
 
 

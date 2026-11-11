@@ -8,19 +8,29 @@ $flashError = get_flash('error');
 $flashSuccess = get_flash('success');
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!is_valid_csrf_token($_POST['csrf_token'] ?? null)) {
+        $err = 'Your session expired. Refresh the page and try again.';
+    }
+
     $email = strtolower(trim((string)($_POST['email'] ?? '')));
     $pass  = trim((string)($_POST['password'] ?? ''));
 
-    if ($email === '' || $pass === '') {
+    if (!$err && ($email === '' || $pass === '')) {
         $err = 'Please fill in all fields.';
-    } else {
+    } elseif (!$err) {
         require_once 'core/db/connection.php';
 
-        $stmt = $pdo->prepare('SELECT id, email, password_hash, role, first_name, last_name, status FROM users WHERE LOWER(email) = LOWER(?) LIMIT 1');
-        $stmt->execute([$email]);
-        $u = $stmt->fetch();
+        try {
+            $stmt = $pdo->prepare('SELECT id, email, password_hash, role, first_name, last_name, status FROM users WHERE LOWER(email) = LOWER(?) LIMIT 1');
+            $stmt->execute([$email]);
+            $u = $stmt->fetch();
+        } catch (Throwable $exception) {
+            error_log('Login lookup failed: ' . $exception->getMessage());
+            $u = false;
+            $err = 'Sign in is temporarily unavailable. Please try again later.';
+        }
 
-        if ($u && !empty($u['password_hash']) && password_verify($pass, $u['password_hash'])) {
+        if (!$err && $u && !empty($u['password_hash']) && password_verify($pass, $u['password_hash'])) {
             $name = trim((string)($u['first_name'] ?? '') . ' ' . (string)($u['last_name'] ?? ''));
             if ($name === '') {
                 $name = (string)($u['email'] ?? 'User');
@@ -29,6 +39,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (isset($u['status']) && strtoupper((string)$u['status']) !== 'ACTIVE') {
                 $err = 'Your account is inactive.';
             } else {
+                regenerate_authenticated_session();
                 $_SESSION['user'] = [
                     'id'    => $u['id'],
                     'email' => $u['email'],
@@ -64,11 +75,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 exit;
             }
-        } else {
+        } elseif (!$err) {
             $err = 'Invalid email or password.';
         }
     }
 }
+$csrfToken = csrf_token();
 $openLogin = ($_SERVER['REQUEST_METHOD'] === 'POST') || isset($_GET['open']) || $flashError || $flashSuccess || $err;
 $heroAttributes = $openLogin ? '' : ' role="button" tabindex="0" aria-label="Open login form"';
 ?>
@@ -517,7 +529,8 @@ $heroAttributes = $openLogin ? '' : ' role="button" tabindex="0" aria-label="Ope
             }
         }
     </style>
-   <link rel="icon" type="image/png" href="<?php echo BASE_URL; ?>/assets/images/logo-ptc.png" sizes="32x32">
+   <link rel="icon" type="image/png" href="<?php echo htmlspecialchars(BASE_URL . '/admin/assets/images/logo-ptc.png', ENT_QUOTES, 'UTF-8'); ?>" sizes="32x32">
+    <link rel="stylesheet" href="dist/tailwind.css">
 </head>
 <body class="<?= $openLogin ? 'hero-compressed' : '' ?>">
     <div class="page-shell">
@@ -563,6 +576,7 @@ $heroAttributes = $openLogin ? '' : ' role="button" tabindex="0" aria-label="Ope
                 <?php endif; ?>
 
                 <form method="post" autocomplete="on">
+                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8'); ?>">
                     <div class="input-field">
                         <label for="email">Email Address</label>
                         <div class="field-box">

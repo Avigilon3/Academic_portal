@@ -2,14 +2,19 @@ import { defineConfig } from 'vite'
 import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
+  base: './',
   plugins: [tailwindcss()],
   build: {
     outDir: 'dist',
     emptyOutDir: true,
     rollupOptions: {
-      input: 'src/tailwind.css',
+      input: {
+        tailwind: 'src/tailwind.css',
+        'portal-ui': 'src/portal-ui.js'
+      },
       output: {
-        assetFileNames: '[name][extname]'
+        assetFileNames: '[name][extname]',
+        entryFileNames: '[name].js'
       }
     }
   }

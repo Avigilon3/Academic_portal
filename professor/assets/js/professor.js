@@ -131,6 +131,9 @@
 		initGradeItemActions();
 		initGradingSheetExport();
 		initStudentSearchFilters();
+		initScoreEntryProgress();
+		initGradeOutcomePreviews();
+		initGradeCellNavigation();
 		initGradingSheetSubmissionGuard();
 		// If server exposes counts, try to fetch them; otherwise pages can call updateCounts
 		// tryFetchCounts();
@@ -317,6 +320,7 @@
 				formData.append(key, payload[key]);
 			}
 		});
+		formData.append('csrf_token', document.body.getAttribute('data-csrf-token') || '');
 
 		return fetch('../includes/grade_item_actions.php', {
 			method: 'POST',
@@ -554,6 +558,8 @@
 				lastAction = btn.value || null;
 			});
 		});
+		var confirmedSubmission = false;
+		var confirmationDialog = createSubmissionConfirmationDialog();
 
 		function getSubmitAction(event) {
 			var submitter = event && event.submitter;
@@ -565,10 +571,12 @@
 
 		form.addEventListener('submit', function (event) {
 			var submitAction = getSubmitAction(event);
-			if (submitAction !== 'submit') {
+			if (submitAction !== 'submit' || confirmedSubmission) {
+				confirmedSubmission = false;
 				return;
 			}
 
+			event.preventDefault();
 			var gradeInputs = form.querySelectorAll('.grade-input');
 			var blankCount = 0;
 			gradeInputs.forEach(function (input) {
@@ -581,20 +589,212 @@
 				}
 			});
 
+			var messages = [];
 			if (blankCount > 0) {
-				var missingMsg = 'There ' + (blankCount === 1 ? 'is 1 score' : ('are ' + blankCount + ' scores')) + ' left blank. Submitting now will keep them empty. Continue?';
-				if (!window.confirm(missingMsg)) {
-					event.preventDefault();
-					event.stopPropagation();
+				messages.push('There ' + (blankCount === 1 ? 'is 1 score' : ('are ' + blankCount + ' scores')) + ' left blank. Submitting now will keep them empty.');
+			}
+			messages.push('Please double-check that all entered scores are accurate before submitting. Do you want to finalize this grading sheet now?');
+
+			function confirmStep(index) {
+				if (index >= messages.length) {
+					confirmedSubmission = true;
+					var submitter = event.submitter || trackedButtons.find(function (button) { return button.value === submitAction; });
+					if (typeof form.requestSubmit === 'function') {
+						if (submitter) form.requestSubmit(submitter);
+						else form.requestSubmit();
+					} else if (confirmationDialog) {
+						confirmedSubmission = false;
+					}
 					return;
 				}
+
+				if (!confirmationDialog || typeof confirmationDialog.showModal !== 'function') {
+					if (window.confirm(messages[index])) confirmStep(index + 1);
+					return;
+				}
+
+				confirmationDialog.show(messages[index], index === messages.length - 1 ? 'Submit grading sheet' : 'Review remaining scores');
+				confirmationDialog.onConfirm = function () { confirmStep(index + 1); };
 			}
 
-			var confirmMessage = 'Please double-check that all entered scores are accurate before submitting. Do you want to finalize this grading sheet now?';
-			if (!window.confirm(confirmMessage)) {
-				event.preventDefault();
-				event.stopPropagation();
+			confirmStep(0);
+		});
+	}
+
+	function createSubmissionConfirmationDialog() {
+		var dialog = document.createElement('dialog');
+		dialog.className = 'grading-submit-confirmation';
+		dialog.setAttribute('aria-labelledby', 'grading-submit-confirmation-title');
+		dialog.innerHTML = '<div class="grading-submit-confirmation__card"><span class="material-symbols-rounded" aria-hidden="true">fact_check</span><h2 id="grading-submit-confirmation-title">Confirm submission</h2><p data-grading-confirmation-message></p><div class="grading-submit-confirmation__actions"><button type="button" data-grading-confirm-cancel>Cancel</button><button type="button" data-grading-confirm-continue>Continue</button></div></div>';
+		document.body.appendChild(dialog);
+
+		var message = dialog.querySelector('[data-grading-confirmation-message]');
+		var continueButton = dialog.querySelector('[data-grading-confirm-continue]');
+		var cancelButton = dialog.querySelector('[data-grading-confirm-cancel]');
+		if (!message || !continueButton || !cancelButton) return null;
+
+		dialog.show = function (text, actionLabel) {
+			message.textContent = text;
+			continueButton.textContent = actionLabel;
+			dialog.showModal();
+			continueButton.focus();
+		};
+		dialog.onConfirm = null;
+		continueButton.addEventListener('click', function () {
+			var onConfirm = dialog.onConfirm;
+			dialog.close();
+			if (typeof onConfirm === 'function') onConfirm();
+		});
+		cancelButton.addEventListener('click', function () { dialog.close(); });
+		dialog.addEventListener('click', function (event) {
+			if (event.target === dialog) dialog.close();
+		});
+		return dialog;
+	}
+
+	function initScoreEntryProgress() {
+		var progress = safeQuery('[data-score-progress]');
+		if (!progress) return;
+
+		var inputs = safeQueryAll('[data-grade-score-input]');
+		var label = safeQuery('[data-score-progress-label]', progress);
+		if (!inputs.length || !label) return;
+
+		function updateProgress() {
+			var entered = 0;
+			var invalid = 0;
+
+			inputs.forEach(function (input) {
+				if ((input.value || '').trim() !== '') entered += 1;
+				if (!input.validity.valid) invalid += 1;
+			});
+
+			var message = entered + ' of ' + inputs.length + ' scores entered';
+			if (invalid > 0) {
+				message += ' · ' + invalid + ' score' + (invalid === 1 ? '' : 's') + ' outside the allowed range';
+			} else if (entered === inputs.length) {
+				message += ' · All scores entered';
 			}
+
+			label.textContent = message;
+			progress.setAttribute('data-invalid', invalid > 0 ? 'true' : 'false');
+		}
+
+		inputs.forEach(function (input) {
+			input.addEventListener('input', updateProgress);
+			input.addEventListener('change', updateProgress);
+		});
+		updateProgress();
+	}
+
+	function initGradeOutcomePreviews() {
+		if (!document.body || document.body.getAttribute('data-sheet-editable') !== '1') return;
+		var table = safeQuery('.grading-sheet-table');
+		if (!table || !table.tHead || table.tHead.rows.length < 2) return;
+
+		var componentHeaders = safeQueryAll('th.component-header', table.tHead.rows[0]);
+		var itemHeaders = Array.from(table.tHead.rows[1].cells);
+		var itemOffset = 0;
+		var groups = componentHeaders.map(function (header) {
+			var count = Math.max(0, header.colSpan - 1);
+			var columns = itemHeaders.slice(itemOffset, itemOffset + count);
+			itemOffset += count;
+			var noItems = columns.some(function (cell) { return cell.textContent.trim() === 'No Grade Items'; });
+			return {
+				weight: Number(header.getAttribute('data-grade-weight')) || 0,
+				itemCount: noItems ? 0 : columns.length
+			};
+		});
+		if (!groups.length) return;
+
+		safeQueryAll('tbody tr', table).forEach(function (row) {
+			var inputs = safeQueryAll('.grade-input', row);
+			var target = safeQuery('.final-grade-column', row);
+			if (!inputs.length || !target) return;
+
+			var badge = document.createElement('span');
+			badge.className = 'grade-outcome-preview';
+			badge.setAttribute('role', 'status');
+			badge.textContent = 'Pending scores';
+			target.appendChild(badge);
+
+			function updatePreview() {
+				var complete = inputs.every(function (input) { return input.value.trim() !== ''; });
+				var valid = inputs.every(function (input) { return input.validity.valid; });
+				badge.className = 'grade-outcome-preview';
+
+				if (!complete) {
+					badge.textContent = 'Pending scores';
+					return;
+				}
+				if (!valid) {
+					badge.textContent = 'Check score range';
+					badge.classList.add('grade-outcome-preview--invalid');
+					return;
+				}
+
+				var gradeOffset = 0;
+				var weightedGrade = 0;
+				var hasGrade = false;
+				groups.forEach(function (group) {
+					if (group.itemCount === 0) {
+						weightedGrade += group.weight;
+						hasGrade = true;
+						return;
+					}
+					var componentInputs = inputs.slice(gradeOffset, gradeOffset + group.itemCount);
+					gradeOffset += group.itemCount;
+					var possible = componentInputs.reduce(function (sum, input) { return sum + (Number(input.max) || 0); }, 0);
+					if (possible <= 0) return;
+					var earned = componentInputs.reduce(function (sum, input) { return sum + (Number(input.value) || 0); }, 0);
+					weightedGrade += (earned / possible) * group.weight;
+					hasGrade = true;
+				});
+
+				if (!hasGrade || weightedGrade <= 0) {
+					badge.textContent = 'No grade yet';
+					return;
+				}
+
+				var finalGrade = Math.round(weightedGrade);
+				badge.textContent = finalGrade >= 75 ? 'Pass' : 'Below passing';
+				badge.classList.add(finalGrade >= 75 ? 'grade-outcome-preview--pass' : 'grade-outcome-preview--fail');
+			}
+
+			inputs.forEach(function (input) {
+				input.addEventListener('input', updatePreview);
+				input.addEventListener('change', updatePreview);
+			});
+			updatePreview();
+		});
+	}
+
+	function initGradeCellNavigation() {
+		var table = safeQuery('.grading-sheet-table');
+		if (!table || !document.body || document.body.getAttribute('data-sheet-editable') !== '1') return;
+
+		var rows = safeQueryAll('tbody tr', table).map(function (row) {
+			return safeQueryAll('.grade-input', row);
+		});
+		table.addEventListener('keydown', function (event) {
+			var input = event.target.closest('.grade-input');
+			if (!input || input.readOnly || input.disabled) return;
+			var rowIndex = rows.findIndex(function (inputs) { return inputs.indexOf(input) !== -1; });
+			if (rowIndex < 0) return;
+			var columnIndex = rows[rowIndex].indexOf(input);
+			var target = null;
+
+			if (event.key === 'ArrowLeft') target = rows[rowIndex][columnIndex - 1];
+			if (event.key === 'ArrowRight') target = rows[rowIndex][columnIndex + 1];
+			if (event.key === 'ArrowUp' || (event.key === 'Enter' && event.shiftKey)) {
+				target = rows[rowIndex - 1] && rows[rowIndex - 1][columnIndex];
+			}
+			if (event.key === 'ArrowDown' || (event.key === 'Enter' && !event.shiftKey)) {
+				target = rows[rowIndex + 1] && rows[rowIndex + 1][columnIndex];
+			}
+			if (!target) return;
+			event.preventDefault();
+			target.focus();
 		});
 	}
 

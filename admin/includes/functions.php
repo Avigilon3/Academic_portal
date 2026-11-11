@@ -1,5 +1,11 @@
 <?php
 
+function adminCsrfField(): string
+{
+    $token = htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8');
+    return '<input type="hidden" name="csrf_token" value="' . $token . '">';
+}
+
 if (!function_exists('adminIsLoggedIn')) {
     function adminIsLoggedIn(): bool {
         

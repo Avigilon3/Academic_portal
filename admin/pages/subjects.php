@@ -120,6 +120,7 @@ $result = $stmt->fetchAll();
       <div class="card-body">
         <div class="tab-pane active" data-pane="add">
           <form action="../includes/subject_process.php" method="POST">
+            <?= adminCsrfField() ?>
             <input type="hidden" name="action" value="create">
             <div class="form-box">
               <div class="row-grid cols-3">
@@ -191,6 +192,7 @@ $result = $stmt->fetchAll();
         <!-- Edit subjects -->
         <div class="tab-pane" data-pane="edit">
           <form action="../includes/subject_process.php" method="POST">
+            <?= adminCsrfField() ?>
             <input type="hidden" name="action" value="update">
             <input type="hidden" name="id" id="edit-id">
             <div class="form-box">
@@ -264,6 +266,7 @@ $result = $stmt->fetchAll();
         <div class="tab-pane" data-pane="courses">
           <div class="form-box">
             <form action="../includes/course_process.php" method="POST">
+              <?= adminCsrfField() ?>
               <input type="hidden" name="action" value="create">
               <div class="row-grid cols-2">
                 <div class="form-group">
@@ -321,6 +324,7 @@ $result = $stmt->fetchAll();
                       <td><?= (!isset($course['is_active']) || $course['is_active']) ? 'Active' : 'Inactive'; ?></td>
                       <td class="actions">
                         <form action="../includes/course_process.php" method="POST" onsubmit="return confirm('Deactivate this course?');">
+                          <?= adminCsrfField() ?>
                           <input type="hidden" name="action" value="delete">
                           <input type="hidden" name="id" value="<?= (int)$course['id']; ?>">
                           <button class="btn btn-sm btn-danger btn-deactivate" type="submit">Deactivate</button>
@@ -338,6 +342,7 @@ $result = $stmt->fetchAll();
         <div class="tab-pane" data-pane="terms">
           <div class="form-box">
             <form action="../includes/term_process.php" method="POST">
+              <?= adminCsrfField() ?>
               <input type="hidden" name="action" value="create">
               <input type="hidden" name="redirect_to" value="subjects">
               <div class="row-grid cols-2">
@@ -377,6 +382,7 @@ $result = $stmt->fetchAll();
           </div>
           <div class="form-box mt-16">
             <form action="../includes/term_process.php" method="POST">
+              <?= adminCsrfField() ?>
               <input type="hidden" name="action" value="update">
               <input type="hidden" name="redirect_to" value="subjects">
               <input type="hidden" name="id" id="term-edit-id">
@@ -453,6 +459,7 @@ $result = $stmt->fetchAll();
                           data-is_active="<?= htmlspecialchars($termRow['is_active']); ?>"
                         >Edit</button>
                         <form action="../includes/term_process.php" method="POST" onsubmit="return confirm('Deactivate this term?');">
+                          <?= adminCsrfField() ?>
                           <input type="hidden" name="action" value="delete">
                           <input type="hidden" name="redirect_to" value="subjects">
                           <input type="hidden" name="id" value="<?= $termRow['id']; ?>">
@@ -571,6 +578,7 @@ $result = $stmt->fetchAll();
                   >Edit</button>
 
                   <form action="../includes/subject_process.php" method="POST" onsubmit="return confirm('Deactivate this subject?');">
+                    <?= adminCsrfField() ?>
                     <input type="hidden" name="action" value="delete">
                     <input type="hidden" name="id" value="<?= $row['id']; ?>">
                     <button class="btn btn-sm btn-danger btn-deactivate" type="submit">Deactivate</button>

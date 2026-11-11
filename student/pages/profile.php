@@ -38,14 +38,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['profile_picture'])) 
         } else {
             $extension = $allowedTypes[$mimeType];
             $targetPath = $uploadDirectory . '/' . $currentUserId . '.' . $extension;
-            foreach (array_values($allowedTypes) as $oldExtension) {
-                $oldPath = $uploadDirectory . '/' . $currentUserId . '.' . $oldExtension;
-                if ($oldPath !== $targetPath && is_file($oldPath)) {
-                    unlink($oldPath);
-                }
-            }
-
             if (move_uploaded_file($file['tmp_name'], $targetPath)) {
+                foreach (array_values($allowedTypes) as $oldExtension) {
+                    $oldPath = $uploadDirectory . '/' . $currentUserId . '.' . $oldExtension;
+                    if ($oldPath !== $targetPath && is_file($oldPath)) {
+                        unlink($oldPath);
+                    }
+                }
                 $success = 'Profile picture updated successfully.';
             } else {
                 $errors[] = 'The profile picture could not be saved.';
@@ -130,6 +129,7 @@ $initials = $initials !== '' ? $initials : 'ST';
                 <h2><?= htmlspecialchars($fullName); ?></h2>
                 <p class="profile-role">Student Account</p>
                 <form class="profile-upload-form" method="post" enctype="multipart/form-data">
+                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8'); ?>">
                     <label class="profile-upload-button" for="profile-picture-input">
                         <span class="material-symbols-rounded" aria-hidden="true">photo_camera</span>
                         Choose photo

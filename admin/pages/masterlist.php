@@ -244,6 +244,7 @@ if ($sectionId) {
           </div>
         </div>
         <form action="../includes/masterlist_process.php" method="POST" id="add-student-form">
+          <?= adminCsrfField() ?>
           <input type="hidden" name="action" value="add">
           <input type="hidden" name="section_id" value="<?= (int)$sectionId; ?>">
           <div class="row-grid cols-3">
@@ -353,6 +354,7 @@ if ($sectionId) {
                     <td><?= htmlspecialchars($row['status'] ?? ''); ?></td>
                     <td class="actions">
                       <form action="../includes/masterlist_process.php" method="POST" onsubmit="return confirm('Remove this student from the section?');">
+                        <?= adminCsrfField() ?>
                         <input type="hidden" name="action" value="remove">
                         <input type="hidden" name="section_id" value="<?= (int)$sectionId; ?>">
                         <input type="hidden" name="student_pk" value="<?= (int)$row['student_pk']; ?>">

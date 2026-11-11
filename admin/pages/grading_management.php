@@ -398,6 +398,7 @@ $redirectUrl = '../pages/grading_management.php' . ($currentQuery ? '?' . $curre
                                         <td><?= $row['submitted_at'] ? htmlspecialchars(date('Y-m-d', strtotime($row['submitted_at']))) : '--'; ?></td>
                                         <td>
                                             <form method="post" class="inline-form" action="../includes/gradingsheet_process.php">
+                                                <?= adminCsrfField() ?>
                                                 <input type="hidden" name="action" value="change_status">
                                                 <input type="hidden" name="id" value="<?= (int)$row['id']; ?>">
                                                 <input type="hidden" name="redirect" value="<?= htmlspecialchars($redirectUrl); ?>">
@@ -435,6 +436,7 @@ $redirectUrl = '../pages/grading_management.php' . ($currentQuery ? '?' . $curre
                                 <div class="component-list">
                                     <?php foreach ($defaultGradeTemplate as $component): ?>
                                         <form method="post" class="component-row">
+                                            <?= adminCsrfField() ?>
                                             <input type="hidden" name="component_id" value="<?= (int)$component['id']; ?>">
                                             <div class="form-group">
                                                 <label>Component Name</label>
@@ -452,6 +454,7 @@ $redirectUrl = '../pages/grading_management.php' . ($currentQuery ? '?' . $curre
                                     <?php endforeach; ?>
                                 </div>
                                 <form method="post" class="component-row add-row" data-default-component-add-form hidden>
+                                    <?= adminCsrfField() ?>
                                     <input type="hidden" name="action" value="add_default_component">
                                     <div class="form-group">
                                         <label>Component Name</label>
@@ -499,6 +502,7 @@ $redirectUrl = '../pages/grading_management.php' . ($currentQuery ? '?' . $curre
                                 </tbody>
                             </table>
                             <form method="post" class="apply-template-form">
+                                <?= adminCsrfField() ?>
                                 <input type="hidden" name="action" value="apply_default_template">
                                 <div class="form-group">
                                     <label>Apply template to specific grading sheet</label>
@@ -627,6 +631,7 @@ $redirectUrl = '../pages/grading_management.php' . ($currentQuery ? '?' . $curre
                                         <td><?= htmlspecialchars($sheet['professor_name'] ?? 'Unassigned'); ?></td>
                                         <td>
                                             <form method="post" class="inline-form" action="../includes/gradingsheet_process.php">
+                                                <?= adminCsrfField() ?>
                                                 <input type="hidden" name="action" value="set_deadline">
                                                 <input type="hidden" name="id" value="<?= (int)$sheet['id']; ?>">
                                                 <input type="hidden" name="redirect" value="<?= htmlspecialchars($redirectUrl); ?>">
@@ -637,6 +642,7 @@ $redirectUrl = '../pages/grading_management.php' . ($currentQuery ? '?' . $curre
                                         <td><?= htmlspecialchars(ucfirst($sheet['status'] ?? 'draft')); ?></td>
                                         <td>
                                             <form method="post" class="inline-form" action="../includes/gradingsheet_process.php">
+                                                <?= adminCsrfField() ?>
                                                 <input type="hidden" name="action" value="change_status">
                                                 <input type="hidden" name="id" value="<?= (int)$sheet['id']; ?>">
                                                 <input type="hidden" name="redirect" value="<?= htmlspecialchars($redirectUrl); ?>">

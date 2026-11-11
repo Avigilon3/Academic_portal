@@ -20,19 +20,31 @@ $sheetLabels = [];
 foreach ($sheetOptions as $opt) {
     $sheetLabels[(int)($opt['id'] ?? 0)] = trim((string)($opt['section_name'] ?? ''));
 }
+$requestedSheetId = isset($_GET['grading_sheet_id']) ? (int)$_GET['grading_sheet_id'] : 0;
+if (!isset($sheetLabels[$requestedSheetId])) {
+    $requestedSheetId = 0;
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $sheetId = isset($_POST['grading_sheet_id']) ? (int)$_POST['grading_sheet_id'] : 0;
-    $reason = trim($_POST['reason'] ?? '');
+    $reasonInput = $_POST['reason'] ?? '';
+    $reason = is_string($reasonInput) ? trim($reasonInput) : '';
 
-    if ($sheetId <= 0 || $reason === '') {
-        set_flash('error', 'Please select a grading sheet and provide a reason.');
+    if (!isset($sheetLabels[$sheetId]) || $reason === '') {
+        set_flash('error', 'Please select one of your grading sheets and provide a reason.');
     } else {
         $insertStmt = $pdo->prepare(
             'INSERT INTO edit_requests (grading_sheet_id, professor_id, reason, status)
              VALUES (?, ?, ?, \'pending\')'
         );
-        $insertStmt->execute([$sheetId, $professorId, $reason]);
+        try {
+            $insertStmt->execute([$sheetId, $professorId, $reason]);
+        } catch (Throwable $error) {
+            error_log('Professor edit request creation failed: ' . $error->getMessage());
+            set_flash('error', 'Your edit access request could not be submitted. Please try again.');
+            header('Location: ./requests.php?submitted=1');
+            exit;
+        }
 
         try {
             $professorName = function_exists('professorFullName')
@@ -77,7 +89,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
         } catch (Throwable $e) {
-            // If notifications fail, do not block the request submission.
+            error_log('Professor edit request notification failed: ' . $e->getMessage());
         }
 
         set_flash('success', 'Request submitted.');
@@ -138,6 +150,7 @@ foreach ($requests as $row) {
                 <p>You currently have no assigned grading sheets.</p>
             <?php else: ?>
                 <form class="new-request-card" method="post">
+                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8'); ?>">
                     <div class="request-icon" aria-hidden="true">
                       <span class="material-symbols-rounded">add_notes</span>
                     </div>
@@ -150,7 +163,7 @@ foreach ($requests as $row) {
                         <select name="grading_sheet_id" class="form-control" required>
                             <option value="">Select section</option>
                             <?php foreach ($sheetOptions as $sheet): ?>
-                                <option value="<?= (int)$sheet['id']; ?>">
+                                <option value="<?= (int)$sheet['id']; ?>" <?= (int)$sheet['id'] === $requestedSheetId ? 'selected' : ''; ?>>
                                     <?= htmlspecialchars($sheet['section_name']); ?>
                                 </option>
                             <?php endforeach; ?>

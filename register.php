@@ -14,6 +14,10 @@ $err = get_flash('error');
 $msg = get_flash('success');
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!is_valid_csrf_token($_POST['csrf_token'] ?? null)) {
+        $err = 'Your session expired. Refresh the page and try again.';
+    }
+
     $email = strtolower(trim((string)($_POST['email'] ?? '')));
     $pass  = trim((string)($_POST['password'] ?? ''));
     $confirm = trim((string)($_POST['retype_password'] ?? ''));
@@ -84,6 +88,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $code = strval(random_int(100000, 999999));
         $userId = (int)$user['id'];
 
+        $passwordHash = password_hash($pass, PASSWORD_BCRYPT);
         $upd = $pdo->prepare('UPDATE users SET verify_code = ?, first_name = ?, last_name = ?, role = ? WHERE id = ?');
         $upd->execute([$code, $first, $last, $roleChoice, $userId]);
 
@@ -107,7 +112,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $_SESSION['pending_reg'] = [
             'email'      => $email,
-            'password'   => $pass,
+            'password_hash' => $passwordHash,
             'code'       => $code,
             'first_name' => $first,
             'last_name'  => $last,
@@ -119,6 +124,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 }
+$csrfToken = csrf_token();
 $canSetCredentials = $prefilledFirst !== '' && $prefilledLast !== '';
 $roleDisplayText = $detectedRole ? 'Detected role: ' . $detectedRole : '';
 $emailHelperMessage = '';
@@ -489,6 +495,7 @@ if ($detectedRole) {
             }
         }
     </style>
+    <link rel="stylesheet" href="dist/tailwind.css">
 </head>
     <body class="hero-compressed">
 
@@ -524,6 +531,7 @@ if ($detectedRole) {
                 <?php endif; ?>
 
                 <form method="post" autocomplete="on" id="registration-form" data-email-verified="<?= ($prefilledFirst && $prefilledLast) ? '1' : '0'; ?>">
+                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8'); ?>">
                     <div class="input-field">
                         <label for="email">Email Address</label>
                         <div class="field-box field-with-button">

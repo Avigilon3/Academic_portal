@@ -364,10 +364,30 @@ if ($displaySemesterLabel || $displaySchoolYear) {
             gap: 16px;
         }
 
+        .report-filter-form {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            align-items: flex-end;
+            gap: 12px;
+        }
+
         .filter-row {
           max-width: none;
             grid-template-columns: repeat(2, minmax(240px, 1fr));
             gap: 18px;
+        }
+
+        .report-filter-submit {
+            display: inline-flex;
+            min-height: 44px;
+            align-items: center;
+            justify-content: center;
+            gap: 7px;
+            white-space: nowrap;
+        }
+
+        .report-filter-submit .material-symbols-rounded {
+            font-size: 19px;
         }
 
         .action-buttons {
@@ -516,6 +536,13 @@ if ($displaySemesterLabel || $displaySchoolYear) {
             background: #f8fafc;
         }
 
+        .grade-empty-state {
+            padding: 22px 14px !important;
+            color: #64748b;
+            text-align: center !important;
+            line-height: 1.5;
+        }
+
         .unit-note,
         .data-stamp {
             margin: 12px 0 0;
@@ -537,14 +564,17 @@ if ($displaySemesterLabel || $displaySchoolYear) {
         }
 
         @media (max-width: 768px) {
+            .report-filter-form {
+                grid-template-columns: 1fr;
+            }
+
             .filter-row {
                 grid-template-columns: 1fr;
                 max-width: none;
             }
 
-            .grade-toolbar {
-                flex-direction: column;
-                align-items: stretch;
+            .report-filter-submit {
+                width: 100%;
             }
 
             .action-buttons {
@@ -584,16 +614,34 @@ if ($displaySemesterLabel || $displaySchoolYear) {
 
             <div class="report-shell report-of-grades">
               <div class="grade-toolbar">
-                <div class="filter-row">
-                  <label class="input-block">
-                    <span class="input-label">Year Level</span>
-                    <input class="form-control" name="year_level" value="<?php echo htmlspecialchars($selectedYear); ?>" placeholder="Year Level" readonly>
-                  </label>
-                  <label class="input-block">
-                    <span class="input-label">Semester</span>
-                    <input class="form-control" name="semester" value="<?php echo htmlspecialchars($selectedSemester); ?>" placeholder="Semester" readonly>
-                  </label>
-                </div>
+                <form class="report-filter-form" method="get" action="report_of_grades.php">
+                  <div class="filter-row">
+                    <label class="input-block" for="report-year-level">
+                      <span class="input-label">Year Level</span>
+                      <select class="form-control" id="report-year-level" name="year_level">
+                        <?php foreach ($yearOptions as $yearOption): ?>
+                          <option value="<?= htmlspecialchars($yearOption, ENT_QUOTES, 'UTF-8'); ?>" <?= $selectedYear === $yearOption ? 'selected' : ''; ?>>
+                            <?= htmlspecialchars($yearOption, ENT_QUOTES, 'UTF-8'); ?>
+                          </option>
+                        <?php endforeach; ?>
+                      </select>
+                    </label>
+                    <label class="input-block" for="report-semester">
+                      <span class="input-label">Semester</span>
+                      <select class="form-control" id="report-semester" name="semester">
+                        <?php foreach ($semesterOptions as $semesterOption): ?>
+                          <option value="<?= htmlspecialchars($semesterOption, ENT_QUOTES, 'UTF-8'); ?>" <?= $selectedSemester === $semesterOption ? 'selected' : ''; ?>>
+                            <?= htmlspecialchars($semesterOption, ENT_QUOTES, 'UTF-8'); ?>
+                          </option>
+                        <?php endforeach; ?>
+                      </select>
+                    </label>
+                  </div>
+                  <button class="btn solid report-filter-submit" type="submit">
+                    <span class="material-symbols-rounded" aria-hidden="true">filter_alt</span>
+                    Apply filters
+                  </button>
+                </form>
                 <div class="action-buttons">
                   <a class="btn solid download-btn" id="download-jpeg-btn" href="#">
                     <span class="material-symbols-rounded" aria-hidden="true">file_download</span>
@@ -675,7 +723,10 @@ if ($displaySemesterLabel || $displaySchoolYear) {
                         <?php endforeach; ?>
                       <?php else: ?>
                         <tr>
-                          <td colspan="5">&nbsp;</td>
+                          <td class="grade-empty-state" colspan="5">
+                            No subjects are available for <?= htmlspecialchars($selectedYear); ?>, <?= htmlspecialchars($selectedSemester); ?>.
+                            Try another year level or semester.
+                          </td>
                         </tr>
                       <?php endif; ?>
                     </tbody>

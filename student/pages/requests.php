@@ -187,6 +187,7 @@ if ($studentId) {
               <div class="new-request-grid">
                 <form class="new-request-card" method="post">
                   <input type="hidden" name="request_type" value="report">
+                  <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8'); ?>">
                   <div class="request-icon" aria-hidden="true">
                    <span class="material-symbols-rounded">add_notes</span>
                   </div>
@@ -219,6 +220,7 @@ if ($studentId) {
                 </form>
                 <form class="new-request-card" method="post">
                   <input type="hidden" name="request_type" value="certificate">
+                  <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8'); ?>">
                   <div class="request-icon" aria-hidden="true">
                     <svg viewBox="0 0 24 24" fill="none" stroke-width="1.6">
                       <path d="M7 3h10l3 3v13a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z" stroke="currentColor" />
@@ -376,6 +378,7 @@ if ($studentId) {
                         </div>
                         <?php if ($row['status'] === 'pending'): ?>
                           <form method="post" class="cancel-request-form">
+                            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8'); ?>">
                             <input type="hidden" name="action" value="cancel">
                             <input type="hidden" name="request_id" value="<?php echo (int)$row['id']; ?>">
                             <button type="submit" class="cancel-btn">Cancel Request</button>

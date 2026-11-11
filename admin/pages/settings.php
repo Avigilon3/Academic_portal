@@ -132,6 +132,7 @@ if ($fullName === '') {
             <h3>General</h3>
             <p class="muted">Select the active term used across the portal.</p>
             <form method="post">
+              <?= adminCsrfField() ?>
               <input type="hidden" name="action" value="set_active_term">
               <label>Active Term</label>
               <select class="form-control" name="active_term_id" required>
@@ -172,6 +173,7 @@ if ($fullName === '') {
               <h3>Change Password</h3>
             </div>
             <form method="post">
+              <?= adminCsrfField() ?>
               <input type="hidden" name="action" value="change_password">
               <label>Current Password</label>
               <input class="form-control" type="password" name="current_password" required>

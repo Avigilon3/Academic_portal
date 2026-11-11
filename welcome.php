@@ -1,7 +1,5 @@
 <?php
-if (!defined('BASE_URL')) {
-    define('BASE_URL', 'http://localhost:8000');
-}
+require_once 'core/config/config.php';
 ?>
 
 <!DOCTYPE html>
@@ -16,9 +14,9 @@ if (!defined('BASE_URL')) {
 	<link href="https://fonts.googleapis.com/css2?family=Arimo:wght@400;500;600;700&family=Bayon&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
 	<style>
 		:root {
-			--green-950: #08251a;
-			--green-900: #0d3d28;
-			--green-700: #17613e;
+			--green-950: #14472c;
+			--green-900: #14472c;
+			--green-700: #1b5e3a;
 			--green-500: #4f9468;
 			--gold: #f5c84c;
 			--gold-soft: #ffe69a;
@@ -184,7 +182,8 @@ if (!defined('BASE_URL')) {
 			*, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 		}
 	</style>
-<link rel="icon" type="image/png" href="<?php echo BASE_URL; ?>/assets/images/logo-ptc.png" sizes="32x32">
+<link rel="icon" type="image/png" href="<?php echo htmlspecialchars(BASE_URL . '/admin/assets/images/logo-ptc.png', ENT_QUOTES, 'UTF-8'); ?>" sizes="32x32">
+<link rel="stylesheet" href="dist/tailwind.css">
 
 </head>
 <body>

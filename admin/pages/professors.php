@@ -90,6 +90,7 @@ $result = $stmt->fetchAll();
       <div class="card-body">
         <div class="tab-pane active" data-pane="add">
           <form action="../includes/professor_process.php" method="POST">
+            <?= adminCsrfField() ?>
             <input type="hidden" name="action" value="create">
             <div class="form-box">
               <div class="row-grid cols-2">
@@ -149,6 +150,7 @@ $result = $stmt->fetchAll();
         </div>
         <div class="tab-pane" data-pane="edit">
           <form action="../includes/professor_process.php" method="POST">
+            <?= adminCsrfField() ?>
             <input type="hidden" name="action" value="update">
             <input type="hidden" name="id" id="edit-id">
             <div class="form-box">
@@ -281,6 +283,7 @@ $result = $stmt->fetchAll();
                 >Edit</button>
 
                 <form action="../includes/professor_process.php" method="POST" onsubmit="return confirm('Deactivate this professor?');">
+                  <?= adminCsrfField() ?>
                   <input type="hidden" name="action" value="delete">
                   <input type="hidden" name="id" value="<?= $row['id']; ?>">
                   <button class="btn btn-sm btn-danger btn-deactivate" type="submit">Deactivate</button>
@@ -301,4 +304,3 @@ $result = $stmt->fetchAll();
 </div>
 </body>
 </html>
-

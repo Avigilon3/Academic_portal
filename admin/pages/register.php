@@ -69,6 +69,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <div class="card">
           <div class="card-body">
             <form method="post">
+              <?= adminCsrfField() ?>
               <div class="row-grid cols-2">
                 <div class="form-group">
                   <label>PTC Email *</label>

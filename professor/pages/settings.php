@@ -121,6 +121,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'chang
                 </div>
             <?php endif; ?>
             <form method="post" class="change-password-form">
+                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8'); ?>">
                 <input type="hidden" name="action" value="change_password">
                 <label for="current_password">Current password</label>
                 <input id="current_password" class="form-control" type="password" name="current_password" required>

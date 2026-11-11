@@ -73,12 +73,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       if (!$id || !in_array($decision, ['approved','denied'], true)) {
         throw new Exception('Invalid decision.');
       }
-      $stmt = $pdo->prepare('UPDATE edit_requests SET status=?, decided_by=?, decided_at=NOW() WHERE id=?');
-      $stmt->execute([$decision, ($_SESSION['user']['id'] ?? null), $id]);
-
       $sheetId = 0;
       $targetUserId = 0;
+      $pdo->beginTransaction();
       try {
+        $stmt = $pdo->prepare('UPDATE edit_requests SET status=?, decided_by=?, decided_at=NOW() WHERE id=?');
+        $stmt->execute([$decision, ($_SESSION['user']['id'] ?? null), $id]);
+
         $infoStmt = $pdo->prepare(
           "SELECT er.grading_sheet_id, er.professor_id, prof.user_id
              FROM edit_requests er
@@ -90,15 +91,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $info = $infoStmt->fetch(PDO::FETCH_ASSOC) ?: [];
         $sheetId = isset($info['grading_sheet_id']) ? (int)$info['grading_sheet_id'] : 0;
         $targetUserId = isset($info['user_id']) ? (int)$info['user_id'] : 0;
-      } catch (Throwable $ignored) {
-        $sheetId = 0;
-        $targetUserId = 0;
+
+        if ($decision === 'approved' && $sheetId > 0) {
+          $reopenStmt = $pdo->prepare("UPDATE grading_sheets SET status = 'reopened', submitted_at = NULL WHERE id = ?");
+          $reopenStmt->execute([$sheetId]);
+        }
+
+        $pdo->commit();
+      } catch (Throwable $error) {
+        if ($pdo->inTransaction()) {
+          $pdo->rollBack();
+        }
+        throw $error;
       }
 
-      if ($decision === 'approved' && $sheetId > 0) {
-        $reopenStmt = $pdo->prepare("UPDATE grading_sheets SET status = 'reopened', submitted_at = NULL WHERE id = ?");
-        $reopenStmt->execute([$sheetId]);
-      }
+      add_activity_log($pdo, $_SESSION['user']['id'] ?? null, 'DECIDE_EDIT_REQUEST', strtoupper($decision).' edit request id: '.$id);
 
       if ($targetUserId > 0) {
         try {
@@ -118,11 +125,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
       }
 
-      add_activity_log($pdo, $_SESSION['user']['id'] ?? null, 'DECIDE_EDIT_REQUEST', strtoupper($decision).' edit request id: '.$id);
       $msg = 'Edit request '.$decision.'.';
     }
+  } catch (PDOException $e) {
+    error_log('Admin request update failed: ' . $e->getMessage());
+    $err = 'The request could not be updated. Please try again.';
   } catch (Exception $e) {
     $err = 'Error: '.$e->getMessage();
+  } catch (Throwable $e) {
+    error_log('Unexpected admin request update failure: ' . $e->getMessage());
+    $err = 'An unexpected error occurred while updating the request.';
   }
 }
 
@@ -327,6 +339,7 @@ foreach ($editRequests as $r) {
                       <div class="action-buttons">
                         <?php if ($r['status'] === 'pending'): ?>
                           <form method="post" class="request-action-form">
+                            <?= adminCsrfField() ?>
                             <input type="hidden" name="action" value="docreq_update">
                             <input type="hidden" name="id" value="<?= (int)$r['id']; ?>">
                             <input type="hidden" name="status" value="scheduled">
@@ -335,6 +348,7 @@ foreach ($editRequests as $r) {
                             <button type="submit" class="btn-pill primary">Set Pickup</button>
                           </form>
                           <form method="post" class="request-action-form">
+                            <?= adminCsrfField() ?>
                             <input type="hidden" name="action" value="docreq_update">
                             <input type="hidden" name="id" value="<?= (int)$r['id']; ?>">
                             <input type="hidden" name="status" value="cancelled">
@@ -344,6 +358,7 @@ foreach ($editRequests as $r) {
                           </form>
                         <?php elseif ($r['status'] === 'scheduled' || $r['status'] === 'ready'): ?>
                           <form method="post">
+                            <?= adminCsrfField() ?>
                             <input type="hidden" name="action" value="docreq_update">
                             <input type="hidden" name="id" value="<?= (int)$r['id']; ?>">
                             <input type="hidden" name="status" value="released">
@@ -409,6 +424,7 @@ foreach ($editRequests as $r) {
                       <?php if ($r['status']==='pending'): ?>
                         <div class="action-buttons">
                           <form method="post">
+                            <?= adminCsrfField() ?>
                             <input type="hidden" name="action" value="editreq_decide">
                             <input type="hidden" name="id" value="<?= (int)$r['id']; ?>">
                             <button type="submit" name="decision" value="approved" class="btn-pill primary">Approve</button>

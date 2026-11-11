@@ -55,7 +55,8 @@ if (function_exists('isLoggedIn') && isLoggedIn() && isset($pdo)) {
 }
 ?>
 <link rel="stylesheet" href="../../dist/tailwind.css">
-<link rel="stylesheet" href="../../core/assets/portal-shell.css?v=20261006.4">
+<link rel="stylesheet" href="../../core/assets/portal-shell.css?v=20261112.1">
+<script type="module" src="../../dist/portal-ui.js"></script>
 <style>
   .feedback-toast {
     position: fixed !important;
@@ -144,6 +145,7 @@ if (function_exists('isLoggedIn') && isLoggedIn() && isset($pdo)) {
             <?php endif; ?>
             <?php if ($profUnreadCount > 0): ?>
               <form method="post" action="../includes/notifications_mark_read.php">
+                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8'); ?>">
                 <button type="submit" class="notif-mark-all">Mark all as read</button>
               </form>
             <?php endif; ?>
