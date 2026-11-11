@@ -1,4 +1,4 @@
-# Academic Portal
+# Pateros Technological College Academic Portal
 
 Academic Portal is a PHP web application for academic records and grade management at Pateros Technological College. It provides separate experiences for administrators and registrars, professors, and students, backed by a shared MySQL/MariaDB database.
 
