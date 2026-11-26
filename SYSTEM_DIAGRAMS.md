@@ -22,6 +22,8 @@ flowchart LR
         ucReopen((Request grading sheet edit access))
         ucResults((View subjects and grades))
         ucDocuments((Request or cancel documents))
+        ucResume((Build and print resume))
+        ucCertificates((View, download, and verify E-Certificates))
         ucProfile((Manage profile and settings))
         ucInteract((Read and interact with announcements))
         ucNotifications((Receive notifications))
@@ -39,6 +41,8 @@ flowchart LR
     professor --> ucNotifications
     student --> ucResults
     student --> ucDocuments
+    student --> ucResume
+    student --> ucCertificates
     student --> ucProfile
     student --> ucInteract
     student --> ucNotifications
@@ -59,6 +63,7 @@ flowchart LR
     subgraph application[PHP Application Server]
         web[PHP web server]
         auth[Session authentication and role guards]
+        verification[Public certificate verification endpoint]
 
         subgraph portals[Role-specific PHP portals]
             studentPortal[Student portal]
@@ -66,33 +71,38 @@ flowchart LR
             adminPortal[Admin portal]
         end
 
-        core[Shared services<br/>PDO connection, notifications, mailer]
+        core[Shared services<br/>PDO connection, notifications, mailer, resume and certificate services]
     end
 
     database[(MySQL database<br/>Users, academic records, grades,<br/>requests, announcements, logs)]
     smtp[Institution SMTP service]
     mailpit[Mailpit SMTP capture and inbox UI<br/>Local development only]
     recipients[Recipient email inboxes]
+    verifier[Employer or registrar]
 
     student -->|HTTP request| web
     professor -->|HTTP request| web
     admin -->|HTTP request| web
+    verifier -->|Certificate code| web
     web --> auth
     auth -->|Student role| studentPortal
     auth -->|Professor role| professorPortal
     auth -->|Admin-type role| adminPortal
+    web --> verification
 
     studentPortal <--> core
     professorPortal <--> core
     adminPortal <--> core
     core <-->|PDO queries| database
+    verification <-->|PDO lookup| database
 
     core -->|Configured outbound mail| smtp
     smtp -->|Email| recipients
     core -.->|Local SMTP profile| mailpit
     mailpit -.->|Captured messages| recipients
 
-    studentPortal -->|Subjects, grades, requests, notices| student
+    studentPortal -->|Subjects, grades, requests, resumes, certificates, notices| student
+    verification -->|Validity and certificate details| verifier
     professorPortal -->|Classes, grading sheets, notices| professor
     adminPortal -->|Records, request queues, reports| admin
 ```
@@ -195,6 +205,27 @@ erDiagram
         int student_id FK
         int score
     }
+    STUDENT_RESUMES {
+        int id PK
+        int student_id FK
+        text professional_summary
+        text skills_json
+        text experience_json
+        text portfolio_links_json
+        text included_certificate_ids
+        timestamp updated_at
+    }
+    GENERATED_CERTIFICATES {
+        int id PK
+        int student_id FK
+        int subject_id FK
+        int term_id FK
+        string certificate_code UK
+        string certificate_type
+        string title
+        decimal units_completed
+        datetime issued_at
+    }
     DOCUMENT_REQUESTS {
         int id PK
         int student_id FK
@@ -260,6 +291,10 @@ erDiagram
     GRADE_COMPONENTS ||--o{ GRADE_ITEMS : contains
     GRADE_ITEMS ||--o{ GRADES : receives
     STUDENTS ||--o{ GRADES : earns
+    STUDENTS ||--o| STUDENT_RESUMES : edits
+    STUDENTS ||--o{ GENERATED_CERTIFICATES : earns
+    SUBJECTS o|--o{ GENERATED_CERTIFICATES : certifies
+    TERMS ||--o{ GENERATED_CERTIFICATES : issues_in
     STUDENTS ||--o{ DOCUMENT_REQUESTS : submits
     GRADING_SHEETS ||--o{ EDIT_REQUESTS : receives
     PROFESSORS ||--o{ EDIT_REQUESTS : submits
@@ -319,6 +354,9 @@ flowchart LR
     requestData[(D4 Document and edit requests)]
     communication[(D5 Announcements and notifications)]
     audit[(D6 Activity logs)]
+    studentTools[(D7 Resume drafts and generated certificates)]
+    certificates((7.0 Build resumes and issue certificates))
+    verifier[Employer or registrar]
 
     admin -->|Credentials| auth
     professor -->|Credentials| auth
@@ -328,6 +366,7 @@ flowchart LR
     auth -->|Authorized role session| grades
     auth -->|Authorized role session| requests
     auth -->|Authorized role session| announcements
+    auth -->|Authorized student session| certificates
 
     admin -->|Student, professor, catalog, section changes| records
     records <--> academic
@@ -341,6 +380,13 @@ flowchart LR
     grades <--> grading
     grades -->|Grade-sheet decisions and changes| audit
     grades -->|Subjects and grade results| student
+    student -->|Resume edits and certificate requests| certificates
+    certificates <--> academic
+    certificates <--> grading
+    certificates <--> studentTools
+    certificates -->|Resume and eligible certificates| student
+    verifier -->|Public code lookup| certificates
+    certificates -->|Verification result| verifier
 
     student -->|Document request or cancellation| requests
     professor -->|Edit-access request| requests
@@ -467,6 +513,8 @@ flowchart TD
     task -->|Subjects| subjects[View enrolled subjects]
     task -->|Grades| grades[View report of grades]
     task -->|Documents| requestType{Request report or certificate?}
+    task -->|CV Builder| resume[Edit resume sections and print an A4 CV]
+    task -->|E-Certificates| certificates[View and download certificates]
     task -->|Profile| profile[View profile or update settings]
     task -->|Announcements| interact[Read, react, or comment]
 
@@ -479,11 +527,18 @@ flowchart TD
 
     subjects --> dashboard
     grades --> dashboard
+    resume --> dashboard
+    certificates --> verify{Verify or download?}
+    verify -->|Download| dashboard
+    verify -->|Public verification| publicCheck[Open verification link or QR code]
+    publicCheck --> dashboard
     profile --> dashboard
     interact --> dashboard
     cancelled --> dashboard
     statusNotice --> dashboard
+
 ```
+ s
 
 ## Notes
 
@@ -491,3 +546,5 @@ flowchart TD
 - Grading-sheet statuses in the schema are `draft`, `submitted`, `locked`, and `reopened`; deadlines can lock sheets, and an approved professor edit request reopens one.
 - Document-request statuses are `pending`, `scheduled`, `ready`, `released`, and `cancelled`. Professor edit-request statuses are `pending`, `approved`, and `denied`.
 - The role guard accepts `mis` and `super_admin`, while the checked-in `users.role` enum lists `admin`, `registrar`, `professor`, and `student`. Confirm this role list against the deployed database before treating those additional roles as provisioned.
+- Resume and certificate tables are created by `database/migrations/add_cv_and_ecertificates.sql`. Grade eligibility uses the shared grade calculator and a `locked` grading sheet; the repository uses `terms` (not `academic_terms`) and contains no student trophy-case table.
+- Course-completion certificates are intentionally withheld until a Registrar-approved completion rule is defined; the certificate unit column preserves the source `subjects.units` fractional value.

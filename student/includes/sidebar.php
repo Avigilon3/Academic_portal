@@ -16,6 +16,14 @@
       <span class="material-symbols-rounded">stacks</span>
       <span class="nav-label">Report of Grades</span>
     </a>
+    <a href="../pages/cv_builder.php" class="nav-item" aria-label="CV Builder" title="CV Builder">
+      <span class="material-symbols-rounded">description</span>
+      <span class="nav-label">CV Builder</span>
+    </a>
+    <a href="../pages/e_certificates.php" class="nav-item" aria-label="E-Certificates" title="E-Certificates">
+      <span class="material-symbols-rounded">workspace_premium</span>
+      <span class="nav-label">E-Certificates</span>
+    </a>
     <a href="../pages/requests.php" class="nav-item" aria-label="Requests" title="Requests">
       <span class="material-symbols-rounded">error</span>
       <span class="nav-label">Requests</span>

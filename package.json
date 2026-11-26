@@ -2,10 +2,16 @@
   "private": true,
   "scripts": {
     "dev": "vite",
-    "build": "vite build"
+    "build": "vite build",
+    "build:certificate-assets": "esbuild src\\certificate-qr.js --bundle --platform=browser --format=iife --minify --outfile=student\\assets\\js\\certificate-qr.js && esbuild src\\certificate-image.js --bundle --platform=browser --format=iife --minify --outfile=student\\assets\\js\\certificate-image-lib.js"
+  },
+  "dependencies": {
+    "html2canvas": "^1.4.1",
+    "qrcode": "^1.5.4"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.13",
+    "esbuild": "^0.28.2",
     "tailwindcss": "^4.1.13",
     "vite": "^7.1.7"
   }
